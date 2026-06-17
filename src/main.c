@@ -1,7 +1,7 @@
 // main.c -- entry point: build a config, hand it to the host.
 //
-// Deliberately thin. Argument parsing and a config file land at CP4; for now we
-// take the ascii-bg.js defaults and launch the GLFW dev host.
+// Deliberately thin. Argument parsing and a config file come later (CP4); for
+// now we take the built-in defaults and launch the GLFW dev host.
 
 #include "core/config.h"
 #include "host/host.h"

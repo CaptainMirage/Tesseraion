@@ -1,11 +1,10 @@
 // config.h -- runtime tunables for the render core.
 //
-// One flat struct of every knob the effect exposes, mirroring the constants in
-// references/ascii-bg.js so the dev host reproduces the website look. CP0 only
-// reads a couple of these (the renderer is still a trivial gradient), but the
-// full set is defined now so the struct is a stable contract the shader stages
-// (CP1..CP3), the config file parser (CP4), and the future wallpaper host all
-// share. tess_config_default() fills in the ascii-bg.js values.
+// One flat struct of every knob the effect exposes, modelled on the original
+// website background effect so the dev host reproduces that look. The full set
+// is defined up front so the struct stays a stable contract shared by the shader
+// stages, the config file parser (CP4), and the future wallpaper host.
+// tess_config_default() fills in the matching defaults.
 
 #ifndef TESS_CONFIG_H
 #define TESS_CONFIG_H
@@ -40,7 +39,7 @@ typedef struct {
     float  accent_boost;   ///< extra alpha on blue crests (JS 0.30).
 } tess_config;
 
-/// Fill cfg with the defaults ported from references/ascii-bg.js.
+/// Fill cfg with the defaults modelled on the original website background effect.
 void tess_config_default(tess_config *cfg);
 
 #endif // TESS_CONFIG_H

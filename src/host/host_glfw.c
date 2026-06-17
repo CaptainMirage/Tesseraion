@@ -34,7 +34,7 @@ static void on_framebuffer_size(GLFWwindow *win, int w, int h) {
     tess_renderer_resize(w, h);
 }
 
-/// Esc quits. Reload key is wired in the CP4 hot-reload chunk.
+/// Esc quits. A live-reload key gets wired alongside hot reload later (CP4).
 static void on_key(GLFWwindow *win, int key, int scancode, int action, int mods) {
     (void)scancode;
     (void)mods;

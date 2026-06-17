@@ -7,7 +7,7 @@
 #include <stdio.h>
 
 // Shader source paths, relative to the working directory (the repo root for the
-// dev host). Kept here for now; a later chunk can make these configurable.
+// dev host). Kept here for now; made configurable later (CP4).
 #define VERT_PATH "shaders/fullscreen.vert"
 #define FRAG_PATH "shaders/ascii.frag"
 
@@ -91,8 +91,8 @@ void tess_renderer_draw(double time_seconds) {
     tess_shader_use(&g_rndr.shader);
 
     glUniform2f(g_rndr.u_resolution, (float)g_rndr.width, (float)g_rndr.height);
-    // CP0 feeds raw seconds; the speed multiplier is applied in the field stage
-    // at CP1 where it actually drives motion.
+    // Feed raw wall-clock seconds; the shader scales this into field-time and
+    // owns the animation speed.
     glUniform1f(g_rndr.u_time, (float)time_seconds);
 
     // One fullscreen triangle, no buffers. The empty VAO is already bound.

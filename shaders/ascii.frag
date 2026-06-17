@@ -1,10 +1,10 @@
 #version 300 es
 // ascii.frag -- Tesseraion field shader.
 //
-// CP1 stage: the animated value-noise field, shown as grayscale. Glyph/ASCII
-// rendering (CP2) and the gray->blue palette (CP3) layer on after this. The file
-// is laid out as separable stages so each can be edited without unpicking the
-// rest: PATTERN (the field generator) here, with GLYPH and PALETTE to follow.
+// Right now this renders the animated value-noise field as grayscale. The glyph
+// / ASCII stage and the gray->blue palette layer on after this (CP2/CP3). The
+// file is laid out as separable stages so each can be edited without unpicking
+// the rest: PATTERN (the field generator) here, with GLYPH and PALETTE to come.
 //
 // ---------------------------------------------------------------------------
 // UNIFORM CONTRACT (the documented interface every host reuses)
@@ -13,10 +13,10 @@
 //   u_resolution : vec2  -- framebuffer size in pixels (width, height)
 //   u_time       : float -- seconds since start (the host owns the clock)
 //
-// Reserved for later chunks (kept here so the contract is stable):
+// Reserved for later, kept here so the contract stays stable:
 //   cell size, palette colours, noise scale/speed, char-ramp params, u_mouse.
-// The field tunables below are hardcoded for now and get promoted to uniforms
-// fed from the config file at CP4.
+// The field tunables below are constants for now; they get promoted to uniforms
+// fed from the config file later (CP4).
 // ---------------------------------------------------------------------------
 
 precision highp float;
@@ -28,26 +28,25 @@ in  vec2 v_uv;
 out vec4 frag_color;
 
 // --- PATTERN stage: value-noise fbm with domain warp -----------------------
-// Ported in spirit from references/ascii-bg.js (FIELDS.noise), NOT bit-exact:
-// the JS integer hash leaned on JS double overflow, so it is replaced with a
-// float lattice hash. The fbm octave structure, quintic fade, domain warp,
-// feature scale and time drift all match, so the blob size and motion match.
+// Reproduces the look of the original website background effect, not a bit-exact
+// port: a float lattice hash stands in for the original integer hash. The
+// value-noise quintic fade, the 3-octave fbm, the domain warp, the feature
+// scale and the slow in-place time drift all match, so blob size and motion
+// track the original.
 
-// Tunables, hardcoded to the ascii-bg.js values for now (CP4 makes them uniforms).
+// Field tunables, constants for now; promoted to config-driven uniforms later (CP4).
 const float NOISE_SCALE = 3.3;          // feature size across the viewport.
 const float WARP        = 0.6;          // domain-warp amount (organic distortion).
-const float SOFTNESS    = 1.2;          // tanh contrast (aurora softness).
-const float SPEED       = 0.6;          // field-units/sec (JS: 30fps * 0.016 * 1.25).
-const vec2  SEED        = vec2(0.0);    // pattern offset; randomized per load at CP4.
+const float SOFTNESS    = 1.2;          // tanh contrast (softness of the field).
+const float SPEED       = 2.0;          // field-time per second; gentle but visibly alive.
+const vec2  SEED        = vec2(0.0);    // pattern offset; randomized per load later (CP4).
 
-/// Stable per-lattice-cell hash in 0..1 (classic sin hash, multipliers echo the
-/// 127/311 the JS hash used).
+/// Stable per-lattice-cell hash in 0..1 (classic sin hash).
 float hash21(vec2 p) {
     return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453123);
 }
 
-/// Value noise: bilinear blend of the four lattice corners with a quintic fade,
-/// matching the JS vnoise/fade.
+/// Value noise: bilinear blend of the four lattice corners with a quintic fade.
 float vnoise(vec2 p) {
     vec2 i = floor(p);
     vec2 f = fract(p);
@@ -59,7 +58,7 @@ float vnoise(vec2 p) {
     return mix(mix(v00, v10, u.x), mix(v01, v11, u.x), u.y);
 }
 
-/// 3-octave fbm (0.5/0.25/0.125 over 0.875), same frequencies as the JS fbm.
+/// 3-octave fbm: weights 0.5/0.25/0.125 normalized by 0.875, at freqs 1/2.1/4.3.
 float fbm(vec2 p) {
     return (vnoise(p)       * 0.5
           + vnoise(p * 2.1)  * 0.25
@@ -78,13 +77,15 @@ float field(vec2 n, float t) {
 }
 
 void main() {
-    // Scale the host's wall clock into field-time so motion matches the web rate.
+    // Scale the host's wall clock into field-time so the drift rate is decoupled
+    // from the frame rate.
     float t = u_time * SPEED;
 
-    // Sample the field per-pixel for the CP1 grayscale view; CP2 quantizes to cells.
+    // Sample the field per-pixel for the grayscale view; cell quantization comes
+    // with the glyph stage (CP2).
     float raw = field(v_uv, t);
 
-    // Soft contrast: tanh sigmoid centered on 0.5 (aurora's softness model).
+    // Soft contrast: tanh sigmoid centered on 0.5.
     float contrast = SOFTNESS * 2.2 * 2.0;
     float curved = 0.5 + 0.5 * tanh((raw - 0.5) * contrast);
 

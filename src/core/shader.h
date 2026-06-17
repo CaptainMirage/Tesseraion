@@ -2,7 +2,7 @@
 //
 // Host-agnostic: assumes a current GLES 3.0 context already exists. A
 // tess_shader owns one program built from a vertex + fragment source file pair
-// and remembers those paths so it can be rebuilt in place (hot reload at CP4).
+// and remembers those paths so it can be rebuilt in place (used for hot reload, CP4).
 // Uniform-location lookups go through helpers here so callers never cache stale
 // locations across a reload.
 

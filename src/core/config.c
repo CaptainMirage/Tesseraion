@@ -3,7 +3,7 @@
 #include "core/config.h"
 
 void tess_config_default(tess_config *cfg) {
-    // Values ported verbatim from references/ascii-bg.js.
+    // Defaults from the original website background effect.
     cfg->fps_cap   = 30;
     cfg->speed     = 1.25;
 
