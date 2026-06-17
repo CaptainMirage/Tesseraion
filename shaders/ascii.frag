@@ -1,20 +1,25 @@
 #version 300 es
 // ascii.frag -- Tesseraion field shader.
 //
-// Right now this renders the animated value-noise field as grayscale. The glyph
-// / ASCII stage and the gray->blue palette layer on after this (CP2/CP3). The
-// file is laid out as separable stages so each can be edited without unpicking
-// the rest: PATTERN (the field generator) here, with GLYPH and PALETTE to come.
+// This renders the animated value-noise field as an ASCII grid: per cell the
+// field picks a glyph from the ramp atlas and a shade. The gray->blue palette
+// layers on after this (CP3). The file is laid out as separable stages so each
+// can be edited without unpicking the rest: PATTERN (the field generator), then
+// GLYPH (intensity -> ramp glyph), with PALETTE to come.
 //
 // ---------------------------------------------------------------------------
 // UNIFORM CONTRACT (the documented interface every host reuses)
 // ---------------------------------------------------------------------------
 // Active now:
-//   u_resolution : vec2  -- framebuffer size in pixels (width, height)
-//   u_time       : float -- seconds since start (the host owns the clock)
+//   u_resolution : vec2      -- framebuffer size in pixels (width, height)
+//   u_time       : float     -- seconds since start (the host owns the clock)
+//   u_cell       : vec2      -- screen cell size in pixels (width, height)
+//   u_atlas      : sampler2D -- R8 glyph atlas, tiles left->right in ramp order
+//   u_ramp_count : float     -- number of glyph tiles in the atlas
+//   u_skip       : float     -- intensities below this draw nothing (sparsity)
 //
 // Reserved for later, kept here so the contract stays stable:
-//   cell size, palette colours, noise scale/speed, char-ramp params, u_mouse.
+//   palette colours, noise scale/speed, u_mouse.
 // The field tunables below are constants for now; they get promoted to uniforms
 // fed from the config file later (CP4).
 // ---------------------------------------------------------------------------
@@ -22,8 +27,12 @@
 precision highp float;
 precision highp int;    // the integer-lattice hash needs full 32-bit int/uint.
 
-uniform vec2  u_resolution;
-uniform float u_time;
+uniform vec2      u_resolution;
+uniform float     u_time;
+uniform vec2      u_cell;
+uniform sampler2D u_atlas;
+uniform float     u_ramp_count;
+uniform float     u_skip;
 
 in  vec2 v_uv;
 out vec4 frag_color;
@@ -43,6 +52,8 @@ const float WARP        = 0.6;          // domain-warp amount (organic distortio
 const float SOFTNESS    = 1.2;          // tanh contrast (softness of the field).
 const float SPEED       = 1.0;          // field-time per second; gentle but visibly alive.
 const vec2  SEED        = vec2(0.0);    // pattern offset; randomized per load later (CP4).
+const float ALPHA_CAP   = 0.5;          // overall brightness: cells are this fraction over black.
+const float FADE_BAND   = 0.22;         // width above the skip floor to fade up from black.
 
 /// Integer-lattice hash -> 0..1. Mirrors the original effect's hash2: the same
 /// constants, with the wrapping arithmetic carried out in uint so overflow is
@@ -86,18 +97,46 @@ float field(vec2 n, float t) {
     return fbm(vec2(fx + WARP * wX + t * 0.03, fy + WARP * wY - t * 0.025));
 }
 
+// --- GLYPH stage: intensity -> ramp glyph, sampled from the atlas -----------
+/// Coverage (0..1) of the glyph chosen for the post-skip intensity `norm` (0..1)
+/// at cell-local uv `local` (0..1, origin top-left). Denser glyphs map to higher
+/// intensity, matching the ramp order in the atlas.
+float glyph_coverage(float norm, vec2 local) {
+    float idx = clamp(floor(norm * u_ramp_count), 0.0, u_ramp_count - 1.0);
+    float u   = (idx + local.x) / u_ramp_count;
+    return texture(u_atlas, vec2(u, local.y)).r;
+}
+
 void main() {
     // Scale the host's wall clock into field-time so the drift rate is decoupled
     // from the frame rate.
     float t = u_time * SPEED;
 
-    // Sample the field per-pixel for the grayscale view; cell quantization comes
-    // with the glyph stage (CP2).
-    float raw = field(v_uv, t);
+    // Top-down pixel coords so cell rows count from the top, matching the grid.
+    vec2 px      = vec2(gl_FragCoord.x, u_resolution.y - gl_FragCoord.y);
+    vec2 cell_id = floor(px / u_cell);
+    vec2 local   = fract(px / u_cell);          // 0..1 within the cell, top-left origin.
+    vec2 grid    = ceil(u_resolution / u_cell); // columns, rows.
+    vec2 n       = cell_id / grid;              // cell's normalized sample point.
 
-    // Soft contrast: tanh sigmoid centered on 0.5.
+    float raw      = field(n, t);
     float contrast = SOFTNESS * 2.2 * 2.0;
-    float curved = 0.5 + 0.5 * tanh((raw - 0.5) * contrast);
+    float curved   = 0.5 + 0.5 * tanh((raw - 0.5) * contrast);   // soft sigmoid.
 
-    frag_color = vec4(vec3(curved), 1.0);
+    // Sparsity: cells below the floor draw nothing.
+    if (curved < u_skip) {
+        frag_color = vec4(0.0, 0.0, 0.0, 1.0);
+        return;
+    }
+
+    // Remap the surviving range to 0..1 to index the ramp.
+    float norm = (curved - u_skip) / (1.0 - u_skip);
+    float cov  = glyph_coverage(norm, local);
+
+    // Brightness model (over black): scale by ALPHA_CAP so the field is muted,
+    // and fade up smoothly from the sparsity floor so dim cells dissolve into
+    // black instead of cutting off hard. Grayscale here; palette lands next (CP3).
+    float shade = curved * ALPHA_CAP;
+    float fade  = smoothstep(u_skip, u_skip + FADE_BAND, curved);
+    frag_color = vec4(vec3(shade * fade * cov), 1.0);
 }

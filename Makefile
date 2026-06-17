@@ -28,24 +28,34 @@ PKG_LIBS   := $(shell pkg-config --libs $(PKGS))
 LIBS      := $(PKG_LIBS) -lm
 
 CFLAGS    := $(CSTD) $(WARN) $(OPT) $(DEFS) $(INCLUDES) $(PKG_CFLAGS)
+# Third-party single-header impls are not warning-clean; build them with warnings
+# off so they never break our -Werror project build.
+CFLAGS_TP := $(CSTD) $(OPT) -w $(DEFS) $(INCLUDES) $(PKG_CFLAGS)
 
-# Sources: every .c under src/.
+# Our sources (strict) plus third-party impl TUs (relaxed).
 SRCS      := $(shell find src -name '*.c')
+TP_SRCS   := $(shell find third_party -name '*.c')
 OBJS      := $(patsubst %.c,$(BUILD_DIR)/%.o,$(SRCS))
-DEPS      := $(OBJS:.o=.d)
+TP_OBJS   := $(patsubst %.c,$(BUILD_DIR)/%.o,$(TP_SRCS))
+DEPS      := $(OBJS:.o=.d) $(TP_OBJS:.o=.d)
 
 .PHONY: all run debug clean
 
 all: $(BIN)
 
-$(BIN): $(OBJS)
-	$(CC) $(OBJS) -o $@ $(LIBS)
+$(BIN): $(OBJS) $(TP_OBJS)
+	$(CC) $(OBJS) $(TP_OBJS) -o $@ $(LIBS)
 
-# Compile each .c, mirroring the src tree under build/. -MMD -MP emits header
+# Compile each .c, mirroring the source tree under build/. -MMD -MP emits header
 # dependency files so edits to headers trigger the right rebuilds.
-$(BUILD_DIR)/%.o: %.c
+$(BUILD_DIR)/src/%.o: src/%.c
 	@mkdir -p $(dir $@)
 	$(CC) $(CFLAGS) -MMD -MP -c $< -o $@
+
+# Third-party TUs: same build, warnings suppressed.
+$(BUILD_DIR)/third_party/%.o: third_party/%.c
+	@mkdir -p $(dir $@)
+	$(CC) $(CFLAGS_TP) -MMD -MP -c $< -o $@
 
 run: $(BIN)
 	./$(BIN)

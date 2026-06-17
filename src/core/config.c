@@ -4,7 +4,7 @@
 
 void tess_config_default(tess_config *cfg) {
     // Defaults from the original website background effect.
-    cfg->fps_cap   = 30;
+    cfg->fps_cap   = 60;
     cfg->speed     = 1.25;
 
     cfg->font_size    = 10.0f;
