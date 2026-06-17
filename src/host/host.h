@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 Captain Mirage
 // host.h -- the host interface.
 //
 // A host owns the window, the GLES context, the clock, and input, then drives

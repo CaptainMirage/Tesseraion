@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 Captain Mirage
 // shader.c -- implementation of the GLSL program module (see shader.h).
 
 // strdup is POSIX, not C11; request it explicitly before any include so the

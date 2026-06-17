@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 Captain Mirage
 // renderer.c -- implementation of the host-agnostic render core (see renderer.h).
 
 #include "core/renderer.h"

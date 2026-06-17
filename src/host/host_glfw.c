@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 Captain Mirage
 // host_glfw.c -- windowed dev host: GLFW window + GLES 3.0 context + loop.
 //
 // This is the only place that knows about GLFW. It creates the context, owns

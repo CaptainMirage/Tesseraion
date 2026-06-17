@@ -1,4 +1,6 @@
 #version 300 es
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 Captain Mirage
 // ascii.frag -- Tesseraion field shader.
 //
 // This renders the animated value-noise field as an ASCII grid: per cell the

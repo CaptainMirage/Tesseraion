@@ -1,4 +1,6 @@
 #version 300 es
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 Captain Mirage
 // Fullscreen-triangle vertex shader.
 //
 // Emits a single oversized triangle that covers the whole viewport with no

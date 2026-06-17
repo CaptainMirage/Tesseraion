@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 Captain Mirage
 // config.c -- defaults and file parsing for the render-core tunables (config.h).
 
 #include "core/config.h"

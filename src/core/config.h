@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 Captain Mirage
 // config.h -- runtime tunables for the render core.
 //
 // One flat struct of every knob the effect exposes, modelled on the original

@@ -31,13 +31,20 @@ Build instructions land here as the project takes shape.
 
 ## License
 
-This project is licensed under the **Apache License 2.0** - see the [LICENSE](LICENSE)
-file for the full text.
+This project is licensed under the **GNU General Public License v3.0 or later**
+(GPL-3.0-or-later) - see the [LICENSE](LICENSE) file for the full text. Every
+source file carries an `SPDX-License-Identifier: GPL-3.0-or-later` header.
 
-In plain terms: **the code is mine (Captain Mirage).** You're free to use, modify,
-and build on it, but you **must retain the copyright and attribution notices**
-(see [NOTICE](NOTICE)) and **state any significant changes** you make. If you use
-this code in your own project, **mention me and link back to this repository.**
-Using it without attribution is not cool, and will make me angry.
+In plain terms: **the code is mine (Captain Mirage)** and it is copyleft. You're
+free to use, study, modify, and share it, but any version you distribute must
+**also be open source under the GPL**, **keep the copyright and license notices**,
+and **state the changes** you made. If you build on it, **mention me and link
+back to this repository.** Using it without attribution is not cool, and will
+make me angry.
+
+The bundled font (`third_party/font_vera_mono.h`) is Bitstream Vera Sans Mono
+under its own permissive license (see `third_party/VeraMono-LICENSE.txt`), and
+`third_party/stb_truetype.h` is public domain / MIT; both are compatible with the
+GPL.
 
 (c) 2026 Captain Mirage

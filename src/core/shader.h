@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 Captain Mirage
 // shader.h -- GLSL program loading, compiling, linking, and hot-reload.
 //
 // Host-agnostic: assumes a current GLES 3.0 context already exists. A

@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 Captain Mirage
 // glyphs.c -- build the ASCII glyph atlas with stb_truetype (see glyphs.h).
 
 #include "core/glyphs.h"

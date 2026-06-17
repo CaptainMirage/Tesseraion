@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 Captain Mirage
 // glyphs.h -- the ASCII glyph atlas.
 //
 // The ramp characters are rasterized into a single-channel (R8) 2D array

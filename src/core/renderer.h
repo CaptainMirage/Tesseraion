@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 Captain Mirage
 // renderer.h -- the host-agnostic GLES render core.
 //
 // This is the whole public surface a host talks to. The renderer assumes a

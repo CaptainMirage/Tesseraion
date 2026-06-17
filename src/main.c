@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 Captain Mirage
 // main.c -- entry point: build a config, hand it to the host.
 //
 // Deliberately thin: resolve a config file (argv[1], else "tesseraion.conf"),
