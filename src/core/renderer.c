@@ -17,10 +17,6 @@
 #define VERT_PATH "shaders/fullscreen.vert"
 #define FRAG_PATH "shaders/ascii.frag"
 
-// Atlas oversampling: glyphs are baked at this multiple of the screen cell, then
-// downsampled by the GPU with mipmaps for clean, crisp minification.
-#define GLYPH_SUPERSAMPLE 4
-
 // --- Renderer state --------------------------------------------------------
 // A single static instance: there is one render core per process (one context,
 // one fullscreen pass). Keeping it file-local keeps the public API a flat set
@@ -156,7 +152,8 @@ static void compute_cell(int w) {
 static bool rebuild_glyphs(void) {
     tess_glyphs next;
     if (!tess_glyphs_build(&next, g_rndr.cfg.ramp, g_rndr.cell_w, g_rndr.cell_h,
-                           g_rndr.cfg.line_h_ratio, GLYPH_SUPERSAMPLE)) {
+                           g_rndr.cfg.line_h_ratio, g_rndr.cfg.supersample,
+                           (tess_glyph_filter)g_rndr.cfg.glyph_filter)) {
         return false;
     }
     tess_glyphs_destroy(&g_rndr.glyphs);
@@ -217,7 +214,9 @@ void tess_renderer_resize(int w, int h) {
     compute_cell(w);
     // Rebuild the atlas only if the baked tile size would actually change, so a
     // resize drag does not thrash the GPU. A failed rebuild keeps the old atlas.
-    int want_tile_w = (int)lroundf(g_rndr.cell_w * (float)GLYPH_SUPERSAMPLE);
+    int ss = g_rndr.cfg.supersample;
+    if (ss < 1) { ss = 1; } else if (ss > 8) { ss = 8; }   // match glyphs_build clamp.
+    int want_tile_w = (int)lroundf(g_rndr.cell_w * (float)ss);
     if (want_tile_w != g_rndr.glyphs.tile_w) {
         rebuild_glyphs();
     }

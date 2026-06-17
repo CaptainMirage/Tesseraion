@@ -29,6 +29,10 @@ typedef struct {
     float  line_h_ratio;   ///< cell height = font_size * this (JS 1.4).
     int    max_cols;       ///< cap columns on wide screens; cell grows past this (JS 260).
 
+    // --- Glyph rendering quality ---
+    int    supersample;    ///< atlas bake multiple of the screen cell (1..8).
+    int    glyph_filter;   ///< tess_glyph_filter: 0 smooth, 1 sharp, 2 pixel.
+
     // --- Char ramp ---
     char   ramp[TESS_RAMP_MAX];  ///< sparse->dense glyphs (JS CHARS: " .:-=+*#%@").
 

@@ -14,8 +14,18 @@
 #include <GLES3/gl3.h>
 #include <stdbool.h>
 
+/// Glyph sampling/quality mode, spanning the crispness spectrum:
+///   SMOOTH - linear with mipmaps (trilinear): cleanest downsample, softest.
+///   SHARP  - linear, no mipmaps: sharper, can alias when minified.
+///   PIXEL  - nearest, no mipmaps: crisp and blocky, no anti-aliasing.
+typedef enum {
+    TESS_GLYPH_SMOOTH = 0,
+    TESS_GLYPH_SHARP  = 1,
+    TESS_GLYPH_PIXEL  = 2,
+} tess_glyph_filter;
+
 /// A built glyph atlas: a 2D array texture with one tile_w x tile_h layer per
-/// glyph, layer i == ramp[i]. Mipmapped.
+/// glyph, layer i == ramp[i]. Mipmapped when the filter mode is SMOOTH.
 typedef struct {
     GLuint texture;   ///< R8 GL_TEXTURE_2D_ARRAY; 0 until built.
     int    count;     ///< layers (== ramp length).
@@ -27,12 +37,12 @@ typedef struct {
 /// the actual screen cell (cell_w_px x cell_h_px) so on-screen scaling stays
 /// near 1:1 and the glyphs stay crisp. The glyph is drawn at font_px =
 /// cell_h_px / line_h_ratio and top-aligned within the tile, matching the web
-/// canvas layout. `supersample` (>=1) bakes the tiles that many times larger for
-/// clean downsampling. Requires a current GLES context. Returns true on success
-/// (logs and zeroes on failure).
+/// canvas layout. `supersample` (clamped to 1..8) bakes the tiles that many
+/// times larger; `filter` selects the sampling/quality mode. Requires a current
+/// GLES context. Returns true on success (logs and zeroes on failure).
 bool tess_glyphs_build(tess_glyphs *g, const char *ramp,
                        float cell_w_px, float cell_h_px, float line_h_ratio,
-                       int supersample);
+                       int supersample, tess_glyph_filter filter);
 
 /// Delete the texture and zero the struct. Safe on a zeroed struct.
 void tess_glyphs_destroy(tess_glyphs *g);

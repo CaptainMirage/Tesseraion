@@ -14,15 +14,14 @@
 
 bool tess_glyphs_build(tess_glyphs *g, const char *ramp,
                        float cell_w_px, float cell_h_px, float line_h_ratio,
-                       int supersample) {
+                       int supersample, tess_glyph_filter filter) {
     memset(g, 0, sizeof(*g));
     if (!ramp || !*ramp) {
         fprintf(stderr, "glyphs: empty ramp\n");
         return false;
     }
-    if (supersample < 1) {
-        supersample = 1;
-    }
+    if (supersample < 1) { supersample = 1; }
+    if (supersample > 8) { supersample = 8; }   // bound the atlas size.
     if (line_h_ratio <= 0.0f) {
         line_h_ratio = 1.0f;
     }
@@ -98,11 +97,21 @@ bool tess_glyphs_build(tess_glyphs *g, const char *ramp,
     glPixelStorei(GL_UNPACK_ALIGNMENT, 1);   // tightly packed single-channel rows.
     glTexImage3D(GL_TEXTURE_2D_ARRAY, 0, GL_R8, tile_w, tile_h, count, 0,
                  GL_RED, GL_UNSIGNED_BYTE, atlas);
-    // Per-layer mipmaps give clean trilinear minification (the shader supplies
-    // explicit gradients so the per-cell uv wrap does not break LOD selection).
-    glGenerateMipmap(GL_TEXTURE_2D_ARRAY);
-    glTexParameteri(GL_TEXTURE_2D_ARRAY, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
-    glTexParameteri(GL_TEXTURE_2D_ARRAY, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    // Filtering per the chosen crispness mode. SMOOTH uses per-layer mipmaps for
+    // clean trilinear minification (the shader supplies explicit gradients so the
+    // per-cell uv wrap does not break LOD selection); SHARP is plain linear;
+    // PIXEL is nearest (blocky, no anti-aliasing).
+    GLint min_filter = GL_LINEAR;
+    GLint mag_filter = GL_LINEAR;
+    if (filter == TESS_GLYPH_SMOOTH) {
+        glGenerateMipmap(GL_TEXTURE_2D_ARRAY);
+        min_filter = GL_LINEAR_MIPMAP_LINEAR;
+    } else if (filter == TESS_GLYPH_PIXEL) {
+        min_filter = GL_NEAREST;
+        mag_filter = GL_NEAREST;
+    }
+    glTexParameteri(GL_TEXTURE_2D_ARRAY, GL_TEXTURE_MIN_FILTER, min_filter);
+    glTexParameteri(GL_TEXTURE_2D_ARRAY, GL_TEXTURE_MAG_FILTER, mag_filter);
     glTexParameteri(GL_TEXTURE_2D_ARRAY, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
     glTexParameteri(GL_TEXTURE_2D_ARRAY, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
     free(atlas);

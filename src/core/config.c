@@ -19,6 +19,9 @@ void tess_config_default(tess_config *cfg) {
     cfg->line_h_ratio = 1.4f;
     cfg->max_cols     = 260;
 
+    cfg->supersample  = 4;   // matches TESS_GLYPH_SMOOTH trilinear default.
+    cfg->glyph_filter = 0;   // TESS_GLYPH_SMOOTH.
+
     snprintf(cfg->ramp, sizeof cfg->ramp, "%s", " .:-=+*#%@");
 
     cfg->noise_scale = 3.3f;
@@ -103,6 +106,14 @@ static void apply_kv(tess_config *cfg, const char *key, const char *val, int lin
     else if (strcmp(key, "char_w_ratio") == 0) { parse_float(val, &cfg->char_w_ratio); }
     else if (strcmp(key, "line_h_ratio") == 0) { parse_float(val, &cfg->line_h_ratio); }
     else if (strcmp(key, "max_cols") == 0)     { if (parse_float(val, &f)) cfg->max_cols = (int)f; }
+    else if (strcmp(key, "supersample") == 0)  { if (parse_float(val, &f)) cfg->supersample = (int)f; }
+    else if (strcmp(key, "glyph_filter") == 0) {
+        if      (strcmp(val, "smooth") == 0) { cfg->glyph_filter = 0; }
+        else if (strcmp(val, "sharp")  == 0) { cfg->glyph_filter = 1; }
+        else if (strcmp(val, "pixel")  == 0) { cfg->glyph_filter = 2; }
+        else { fprintf(stderr, "config: glyph_filter '%s' not smooth/sharp/pixel on line %d "
+                               "(ignored)\n", val, line); }
+    }
     else if (strcmp(key, "ramp") == 0)         { parse_ramp(val, cfg->ramp, sizeof cfg->ramp); }
     else if (strcmp(key, "noise_scale") == 0)  { parse_float(val, &cfg->noise_scale); }
     else if (strcmp(key, "warp") == 0)         { parse_float(val, &cfg->warp); }

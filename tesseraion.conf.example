@@ -17,6 +17,10 @@
 # line_h_ratio = 1.4       # cell height = font_size * this
 # max_cols     = 260       # cap columns on wide screens (cell grows past this)
 
+# --- Glyph rendering quality (crispness) ---
+# supersample  = 4         # atlas bake multiple of the cell, 1..8 (higher = sharper downsample)
+# glyph_filter = smooth    # smooth (linear+mipmaps), sharp (linear, no mipmaps), pixel (nearest/blocky)
+
 # --- Char ramp (sparse -> dense). Quote it to keep the leading space. ---
 # ramp         = " .:-=+*#%@"
 
