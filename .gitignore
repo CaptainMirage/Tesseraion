@@ -1,0 +1,11 @@
+# build output
+/build/
+*.o
+*.a
+/tesseraion
+
+# editor / OS cruft
+.cache/
+compile_commands.json
+*.swp
+.DS_Store
