@@ -2,10 +2,10 @@
 // ascii.frag -- Tesseraion field shader.
 //
 // This renders the animated value-noise field as an ASCII grid: per cell the
-// field picks a glyph from the ramp atlas and a shade. The gray->blue palette
-// layers on after this (CP3). The file is laid out as separable stages so each
-// can be edited without unpicking the rest: PATTERN (the field generator), then
-// GLYPH (intensity -> ramp glyph), with PALETTE to come.
+// field picks a glyph from the ramp atlas, a shade, and a colour. The file is
+// laid out as separable stages so each can be edited without unpicking the rest:
+// PATTERN (the field generator), GLYPH (intensity -> ramp glyph), and PALETTE
+// (intensity -> gray base / blue crests over black).
 //
 // ---------------------------------------------------------------------------
 // UNIFORM CONTRACT (the documented interface every host reuses)
@@ -125,6 +125,25 @@ float glyph_coverage(float norm, vec2 local) {
     return mix(c0, c1, fract(f));
 }
 
+// --- PALETTE stage: gray base -> blue crests, over black --------------------
+// Cells read as a muted gray for most intensities and tip toward royal blue only
+// on the rare high crests, the website's look. Constants for now (CP4 -> config).
+const vec3  MID_RGB      = vec3(120.0, 128.0, 148.0) / 255.0;  // gray base.
+const vec3  PEAK_RGB     = vec3( 74.0, 140.0, 255.0) / 255.0;  // royal blue crests.
+const float BLUE_START   = 0.60;        // intensity where blue starts to emerge.
+const float BLUE_FULL    = 0.93;        // intensity that reads fully blue.
+const float ACCENT_BOOST = 0.30;        // extra alpha on the blue crests (pop).
+
+/// Colour for a cell at intensity `curved`: lerp gray->blue by the crest factor,
+/// returned premultiplied by its over-black alpha (base brightness plus an accent
+/// boost on the crests).
+vec3 palette(float curved) {
+    float bt    = smoothstep(BLUE_START, BLUE_FULL, curved);
+    vec3  col   = mix(MID_RGB, PEAK_RGB, bt);
+    float alpha = curved * ALPHA_CAP + bt * ACCENT_BOOST;
+    return col * alpha;
+}
+
 void main() {
     // Scale the host's wall clock into field-time so the drift rate is decoupled
     // from the frame rate.
@@ -151,10 +170,10 @@ void main() {
     float norm = (curved - u_skip) / (1.0 - u_skip);
     float cov  = glyph_coverage(norm, local);
 
-    // Brightness model (over black): scale by ALPHA_CAP so the field is muted,
-    // and fade up smoothly from the sparsity floor so dim cells dissolve into
-    // black instead of cutting off hard. Grayscale here; palette lands next (CP3).
-    float shade = curved * ALPHA_CAP;
-    float fade  = smoothstep(u_skip, u_skip + FADE_BAND, curved);
-    frag_color = vec4(vec3(shade * fade * cov), 1.0);
+    // Colour (premultiplied by its over-black alpha) times the glyph coverage,
+    // faded up smoothly from the sparsity floor so dim cells dissolve into black
+    // instead of cutting off hard.
+    vec3  col  = palette(curved);
+    float fade = smoothstep(u_skip, u_skip + FADE_BAND, curved);
+    frag_color = vec4(col * (fade * cov), 1.0);
 }
