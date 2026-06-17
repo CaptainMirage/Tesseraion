@@ -31,4 +31,13 @@ Build instructions land here as the project takes shape.
 
 ## License
 
-TBD.
+This project is licensed under the **Apache License 2.0** - see the [LICENSE](LICENSE)
+file for the full text.
+
+In plain terms: **the code is mine (Captain Mirage).** You're free to use, modify,
+and build on it, but you **must retain the copyright and attribution notices**
+(see [NOTICE](NOTICE)) and **state any significant changes** you make. If you use
+this code in your own project, **mention me and link back to this repository.**
+Using it without attribution is not cool, and will make me angry.
+
+(c) 2026 Captain Mirage
