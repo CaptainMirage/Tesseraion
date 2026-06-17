@@ -33,6 +33,16 @@ void tess_renderer_draw(double time_seconds);
 /// nonzero if the rebuild failed (the previous program stays live).
 int tess_renderer_reload_shader(void);
 
+/// Reload the shader only if a source file changed on disk since the last load.
+/// Cheap to poll. Returns true if a reload was triggered (whether or not it then
+/// succeeded; a failed reload keeps the live program). Stat errors are ignored.
+bool tess_renderer_reload_shader_if_changed(void);
+
+/// Adopt a new config at runtime: recompute the cell, rebuild the atlas if the
+/// ramp/metrics changed, and re-push every config-driven uniform. Returns 0 on
+/// success, nonzero if the atlas rebuild failed (old atlas kept).
+int tess_renderer_apply_config(const tess_config *cfg);
+
 /// Enable/disable smooth cross-fading between adjacent ramp glyphs as the field
 /// intensity varies (off = a hard glyph per cell). Query the current state.
 void tess_renderer_set_glyph_blend(bool on);

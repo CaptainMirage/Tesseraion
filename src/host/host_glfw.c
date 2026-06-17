@@ -7,6 +7,7 @@
 // context and calling the same renderer functions.
 
 #include "host/host.h"
+#include "core/config.h"
 #include "core/renderer.h"
 
 // GLFW must see that we want the GLES headers, not desktop GL, before include.
@@ -14,6 +15,8 @@
 #include <GLFW/glfw3.h>
 
 #include <stdio.h>
+#include <sys/stat.h>
+#include <time.h>
 
 #define INITIAL_WIDTH  1280
 #define INITIAL_HEIGHT 720
@@ -34,8 +37,8 @@ static void on_framebuffer_size(GLFWwindow *win, int w, int h) {
     tess_renderer_resize(w, h);
 }
 
-/// Esc quits; B toggles smooth glyph cross-fading. A live-reload key gets wired
-/// alongside hot reload later (CP4).
+/// Esc quits; B toggles smooth glyph cross-fading. (Shader and config files
+/// hot-reload automatically when edited, so no reload key is needed.)
 static void on_key(GLFWwindow *win, int key, int scancode, int action, int mods) {
     (void)scancode;
     (void)mods;
@@ -53,7 +56,17 @@ static void on_key(GLFWwindow *win, int key, int scancode, int action, int mods)
 
 // --- Host loop -------------------------------------------------------------
 
-int tess_host_run(const tess_config *cfg) {
+/// Current mtime of a file, or 0 if it cannot be stat'd (treated as absent).
+static time_t file_mtime(const char *path) {
+    struct stat st;
+    return (path && stat(path, &st) == 0) ? st.st_mtime : 0;
+}
+
+int tess_host_run(const tess_config *cfg, const char *config_path) {
+    // Keep our own mutable copy so a live config edit can be re-applied (and the
+    // frame budget recomputed) without disturbing the caller's struct.
+    tess_config live = *cfg;
+
     glfwSetErrorCallback(on_glfw_error);
 
     if (!glfwInit()) {
@@ -86,25 +99,52 @@ int tess_host_run(const tess_config *cfg) {
     int fb_w = 0, fb_h = 0;
     glfwGetFramebufferSize(win, &fb_w, &fb_h);
 
-    if (tess_renderer_init(fb_w, fb_h, cfg) != 0) {
+    if (tess_renderer_init(fb_w, fb_h, &live) != 0) {
         fprintf(stderr, "host: renderer init failed\n");
         glfwDestroyWindow(win);
         glfwTerminate();
         return 1;
     }
 
-    fprintf(stderr, "tesseraion: Esc to quit, B to toggle glyph blend\n");
+    fprintf(stderr, "tesseraion: Esc to quit, B to toggle glyph blend; "
+                    "shader/config hot-reload on save\n");
 
     // Frame pacing: render when the per-frame budget has elapsed, otherwise
     // sleep on events. This keeps CPU/GPU idle between frames (the FPS cap) yet
     // stays responsive to resize/close.
-    const double budget = (cfg->fps_cap > 0) ? 1.0 / (double)cfg->fps_cap : 0.0;
-    double next = glfwGetTime();
+    double budget = (live.fps_cap > 0) ? 1.0 / (double)live.fps_cap : 0.0;
+    double next   = glfwGetTime();
+
+    // Live-edit watch: poll source mtimes a few times a second (not every frame).
+    time_t cfg_mtime         = file_mtime(config_path);
+    double next_reload_check = glfwGetTime();
 
     while (!glfwWindowShouldClose(win)) {
         glfwPollEvents();
 
         double now = glfwGetTime();
+
+        if (now >= next_reload_check) {
+            next_reload_check = now + 0.25;
+            tess_renderer_reload_shader_if_changed();
+            time_t m = file_mtime(config_path);
+            if (config_path && m != cfg_mtime) {
+                cfg_mtime = m;
+                // Re-parse over fresh defaults; preserve the running seed unless
+                // the file pins one, so a tweak does not jump the pattern.
+                float prev_x = live.seed_x, prev_y = live.seed_y;
+                tess_config_default(&live);
+                tess_config_load(&live, config_path);
+                if (!live.seed_pinned) {
+                    live.seed_x = prev_x;
+                    live.seed_y = prev_y;
+                }
+                tess_renderer_apply_config(&live);
+                budget = (live.fps_cap > 0) ? 1.0 / (double)live.fps_cap : 0.0;
+                fprintf(stderr, "config: reloaded %s\n", config_path);
+            }
+        }
+
         if (now >= next) {
             tess_renderer_draw(now);
             glfwSwapBuffers(win);

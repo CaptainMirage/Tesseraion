@@ -1,0 +1,39 @@
+# Tesseraion config (sample).
+#
+# Copy this to "tesseraion.conf" (next to the binary, or pass a path as the first
+# argument) and uncomment what you want to change. Anything left commented keeps
+# the built-in default shown beside it. The running app re-reads this file on
+# save, so edits apply live.
+#
+# Format: one "key = value" per line, "#" starts a comment.
+
+# --- Host / timing ---
+# fps_cap      = 60        # frame cap; keeps an idle wallpaper from cooking the GPU
+# speed        = 1.0       # field-time advanced per real second (drift rate)
+
+# --- Cell metrics ---
+# font_size    = 10        # px the cell derives from
+# char_w_ratio = 0.62      # cell width  = font_size * this
+# line_h_ratio = 1.4       # cell height = font_size * this
+# max_cols     = 260       # cap columns on wide screens (cell grows past this)
+
+# --- Char ramp (sparse -> dense). Quote it to keep the leading space. ---
+# ramp         = " .:-=+*#%@"
+
+# --- Noise field ---
+# noise_scale  = 3.3       # feature size across the viewport (lower = larger blobs)
+# warp         = 0.6       # domain-warp amount (organic distortion)
+# softness     = 1.2       # contrast of the field
+# skip         = 0.28      # intensities below this draw nothing (sparsity)
+# alpha_cap    = 0.5       # overall brightness (cells are this fraction over black)
+# fade_band    = 0.22      # width above skip over which cells fade up from black
+
+# --- Seed: pin for a fixed pattern; omit for a random one each launch ---
+# seed         = 42
+
+# --- Palette (rgb 0..255) ---
+# mid_rgb      = 120 128 148   # gray base for mid intensities
+# peak_rgb     = 74 140 255    # blue crest colour
+# blue_start   = 0.60          # intensity where blue begins
+# blue_full    = 0.93          # intensity that reads fully blue
+# accent_boost = 0.30          # extra alpha on the blue crests

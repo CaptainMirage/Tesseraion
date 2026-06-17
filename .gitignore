@@ -4,6 +4,9 @@
 *.a
 /tesseraion
 
+# local runtime config (copied from tesseraion.conf.example)
+/tesseraion.conf
+
 # editor / OS cruft
 .cache/
 compile_commands.json

@@ -9,11 +9,17 @@
 #ifndef TESS_CONFIG_H
 #define TESS_CONFIG_H
 
+#include <stdbool.h>
+
+/// Max ramp length we store inline (owns the string, so a config is safe to copy
+/// and free of heap ownership).
+#define TESS_RAMP_MAX 64
+
 /// All effect + host tunables. Plain values, no ownership, safe to copy.
 typedef struct {
     // --- Host / timing ---
-    int    fps_cap;        ///< frame cap so an idle wallpaper does not cook the GPU (JS: 30).
-    double speed;          ///< animation speed multiplier (JS SPEED: 1.25).
+    int    fps_cap;        ///< frame cap so an idle wallpaper does not cook the GPU.
+    double speed;          ///< field-time advanced per real second (drift rate).
 
     // --- Cell metrics ---
     float  font_size;      ///< px the cell derives from (JS FONT_SIZE: 10).
@@ -22,7 +28,7 @@ typedef struct {
     int    max_cols;       ///< cap columns on wide screens; cell grows past this (JS 260).
 
     // --- Char ramp ---
-    const char *ramp;      ///< sparse->dense glyphs (JS CHARS: " .:-=+*#%@").
+    char   ramp[TESS_RAMP_MAX];  ///< sparse->dense glyphs (JS CHARS: " .:-=+*#%@").
 
     // --- Noise field ---
     float  noise_scale;    ///< feature size across the viewport (JS 3.3).
@@ -30,6 +36,14 @@ typedef struct {
     float  softness;       ///< tanh contrast; effective = softness*2.2*2 (JS 1.2).
     float  skip;           ///< intensities below this draw nothing (JS 0.28).
     float  alpha_cap;      ///< base per-cell alpha scaler (JS 0.50).
+    float  fade_band;      ///< width above skip to fade cells up from black.
+
+    // --- Seed ---
+    // Pattern offset into the infinite noise field. Pinned reproduces a fixed
+    // pattern; unpinned is randomized per load so each launch looks different.
+    float  seed_x;         ///< x offset into the field.
+    float  seed_y;         ///< y offset into the field.
+    bool   seed_pinned;    ///< true once a seed is set explicitly (config or pin).
 
     // --- Palette ---
     float  mid_rgb[3];     ///< gray base for mid intensities (JS [120,128,148], 0..255).
@@ -41,5 +55,12 @@ typedef struct {
 
 /// Fill cfg with the defaults modelled on the original website background effect.
 void tess_config_default(tess_config *cfg);
+
+/// Overlay a `key = value` config file onto `cfg` (call after _default). Lines
+/// are `key = value`, `#` starts a comment, blanks are ignored; unknown keys and
+/// malformed values are warned about and skipped. A `seed` key pins the seed.
+/// Returns true if the file was opened and parsed, false if it was absent (in
+/// which case `cfg` keeps its current values).
+bool tess_config_load(tess_config *cfg, const char *path);
 
 #endif // TESS_CONFIG_H

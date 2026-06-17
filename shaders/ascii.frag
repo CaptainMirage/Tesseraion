@@ -10,19 +10,30 @@
 // ---------------------------------------------------------------------------
 // UNIFORM CONTRACT (the documented interface every host reuses)
 // ---------------------------------------------------------------------------
-// Active now:
-//   u_resolution : vec2      -- framebuffer size in pixels (width, height)
-//   u_time       : float     -- seconds since start (the host owns the clock)
+// Per frame / per event:
+//   u_resolution  : vec2           -- framebuffer size in pixels (width, height)
+//   u_time        : float          -- seconds since start (the host owns the clock)
 //   u_cell        : vec2           -- screen cell size in pixels (width, height)
 //   u_atlas       : sampler2DArray -- R8 glyph atlas, one layer per ramp glyph
 //   u_ramp_count  : float          -- number of glyph layers in the atlas
-//   u_skip        : float          -- intensities below this draw nothing (sparsity)
 //   u_glyph_blend : float          -- >0.5 cross-fades adjacent ramp glyphs
 //
-// Reserved for later, kept here so the contract stays stable:
-//   palette colours, noise scale/speed, u_mouse.
-// The field tunables below are constants for now; they get promoted to uniforms
-// fed from the config file later (CP4).
+// Config tunables (set on init and on config reload):
+//   u_noise_scale : float          -- feature size across the viewport
+//   u_warp        : float          -- domain-warp amount
+//   u_softness    : float          -- tanh contrast (effective = softness*2.2*2)
+//   u_speed       : float          -- field-time advanced per real second
+//   u_seed        : vec2           -- pattern offset into the noise field
+//   u_skip        : float          -- intensities below this draw nothing (sparsity)
+//   u_alpha_cap   : float          -- base per-cell brightness over black
+//   u_fade_band   : float          -- width above skip to fade up from black
+//   u_mid_rgb     : vec3           -- gray base colour (0..1)
+//   u_peak_rgb    : vec3           -- blue crest colour (0..1)
+//   u_blue_start  : float          -- intensity where blue begins
+//   u_blue_full   : float          -- intensity that reads fully blue
+//   u_accent_boost: float          -- extra alpha on the blue crests
+//
+// Reserved for later, kept here so the contract stays stable: u_mouse.
 // ---------------------------------------------------------------------------
 
 precision highp float;
@@ -34,8 +45,22 @@ uniform float          u_time;
 uniform vec2           u_cell;
 uniform sampler2DArray u_atlas;
 uniform float          u_ramp_count;
-uniform float          u_skip;
 uniform float          u_glyph_blend;
+
+// Config-driven field + palette tunables.
+uniform float u_noise_scale;
+uniform float u_warp;
+uniform float u_softness;
+uniform float u_speed;
+uniform vec2  u_seed;
+uniform float u_skip;
+uniform float u_alpha_cap;
+uniform float u_fade_band;
+uniform vec3  u_mid_rgb;
+uniform vec3  u_peak_rgb;
+uniform float u_blue_start;
+uniform float u_blue_full;
+uniform float u_accent_boost;
 
 in  vec2 v_uv;
 out vec4 frag_color;
@@ -48,15 +73,6 @@ out vec4 frag_color;
 // (which wraps cleanly), so it matches the original exactly across the lattice
 // range we sample, and only parts ways where the original's double precision
 // would itself round (very large seed offsets), which does not change the look.
-
-// Field tunables, constants for now; promoted to config-driven uniforms later (CP4).
-const float NOISE_SCALE = 3.3;          // feature size across the viewport.
-const float WARP        = 0.6;          // domain-warp amount (organic distortion).
-const float SOFTNESS    = 1.2;          // tanh contrast (softness of the field).
-const float SPEED       = 1.0;          // field-time per second; gentle but visibly alive.
-const vec2  SEED        = vec2(0.0);    // pattern offset; randomized per load later (CP4).
-const float ALPHA_CAP   = 0.5;          // overall brightness: cells are this fraction over black.
-const float FADE_BAND   = 0.22;         // width above the skip floor to fade up from black.
 
 /// Integer-lattice hash -> 0..1. Mirrors the original effect's hash2: the same
 /// constants, with the wrapping arithmetic carried out in uint so overflow is
@@ -93,11 +109,11 @@ float fbm(vec2 p) {
 /// in place with no flow direction. Aspect-corrected on x so blobs stay round.
 float field(vec2 n, float t) {
     float aspect = u_resolution.x / max(1.0, u_resolution.y);
-    float fx = n.x * NOISE_SCALE * aspect + SEED.x;
-    float fy = n.y * NOISE_SCALE + SEED.y;
+    float fx = n.x * u_noise_scale * aspect + u_seed.x;
+    float fy = n.y * u_noise_scale + u_seed.y;
     float wX = fbm(vec2(fx + 11.3, fy + 5.7 + t * 0.05)) - 0.5;
     float wY = fbm(vec2(fx - 7.1,  fy - 3.2 - t * 0.04)) - 0.5;
-    return fbm(vec2(fx + WARP * wX + t * 0.03, fy + WARP * wY - t * 0.025));
+    return fbm(vec2(fx + u_warp * wX + t * 0.03, fy + u_warp * wY - t * 0.025));
 }
 
 // --- GLYPH stage: intensity -> ramp glyph, sampled from the atlas -----------
@@ -127,27 +143,21 @@ float glyph_coverage(float norm, vec2 local) {
 
 // --- PALETTE stage: gray base -> blue crests, over black --------------------
 // Cells read as a muted gray for most intensities and tip toward royal blue only
-// on the rare high crests, the website's look. Constants for now (CP4 -> config).
-const vec3  MID_RGB      = vec3(120.0, 128.0, 148.0) / 255.0;  // gray base.
-const vec3  PEAK_RGB     = vec3( 74.0, 140.0, 255.0) / 255.0;  // royal blue crests.
-const float BLUE_START   = 0.60;        // intensity where blue starts to emerge.
-const float BLUE_FULL    = 0.93;        // intensity that reads fully blue.
-const float ACCENT_BOOST = 0.30;        // extra alpha on the blue crests (pop).
-
+// on the rare high crests, the website's look.
 /// Colour for a cell at intensity `curved`: lerp gray->blue by the crest factor,
 /// returned premultiplied by its over-black alpha (base brightness plus an accent
 /// boost on the crests).
 vec3 palette(float curved) {
-    float bt    = smoothstep(BLUE_START, BLUE_FULL, curved);
-    vec3  col   = mix(MID_RGB, PEAK_RGB, bt);
-    float alpha = curved * ALPHA_CAP + bt * ACCENT_BOOST;
+    float bt    = smoothstep(u_blue_start, u_blue_full, curved);
+    vec3  col   = mix(u_mid_rgb, u_peak_rgb, bt);
+    float alpha = curved * u_alpha_cap + bt * u_accent_boost;
     return col * alpha;
 }
 
 void main() {
     // Scale the host's wall clock into field-time so the drift rate is decoupled
     // from the frame rate.
-    float t = u_time * SPEED;
+    float t = u_time * u_speed;
 
     // Top-down pixel coords so cell rows count from the top, matching the grid.
     vec2 px      = vec2(gl_FragCoord.x, u_resolution.y - gl_FragCoord.y);
@@ -157,7 +167,7 @@ void main() {
     vec2 n       = cell_id / grid;              // cell's normalized sample point.
 
     float raw      = field(n, t);
-    float contrast = SOFTNESS * 2.2 * 2.0;
+    float contrast = u_softness * 2.2 * 2.0;
     float curved   = 0.5 + 0.5 * tanh((raw - 0.5) * contrast);   // soft sigmoid.
 
     // Sparsity: cells below the floor draw nothing.
@@ -174,6 +184,6 @@ void main() {
     // faded up smoothly from the sparsity floor so dim cells dissolve into black
     // instead of cutting off hard.
     vec3  col  = palette(curved);
-    float fade = smoothstep(u_skip, u_skip + FADE_BAND, curved);
+    float fade = smoothstep(u_skip, u_skip + u_fade_band, curved);
     frag_color = vec4(col * (fade * cov), 1.0);
 }
