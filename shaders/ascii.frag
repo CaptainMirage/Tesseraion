@@ -12,7 +12,9 @@
 // ---------------------------------------------------------------------------
 // Per frame / per event:
 //   u_resolution  : vec2           -- framebuffer size in pixels (width, height)
-//   u_time        : float          -- seconds since start (the host owns the clock)
+//   u_time        : float          -- accumulated field-time in seconds (the
+//                                     renderer applies speed, so changing speed
+//                                     changes the rate, not the phase)
 //   u_cell        : vec2           -- screen cell size in pixels (width, height)
 //   u_atlas       : sampler2DArray -- R8 glyph atlas, one layer per ramp glyph
 //   u_ramp_count  : float          -- number of glyph layers in the atlas
@@ -22,7 +24,6 @@
 //   u_noise_scale : float          -- feature size across the viewport
 //   u_warp        : float          -- domain-warp amount
 //   u_softness    : float          -- tanh contrast (effective = softness*2.2*2)
-//   u_speed       : float          -- field-time advanced per real second
 //   u_seed        : vec2           -- pattern offset into the noise field
 //   u_skip        : float          -- intensities below this draw nothing (sparsity)
 //   u_alpha_cap   : float          -- base per-cell brightness over black
@@ -51,7 +52,6 @@ uniform float          u_glyph_blend;
 uniform float u_noise_scale;
 uniform float u_warp;
 uniform float u_softness;
-uniform float u_speed;
 uniform vec2  u_seed;
 uniform float u_skip;
 uniform float u_alpha_cap;
@@ -155,9 +155,8 @@ vec3 palette(float curved) {
 }
 
 void main() {
-    // Scale the host's wall clock into field-time so the drift rate is decoupled
-    // from the frame rate.
-    float t = u_time * u_speed;
+    // u_time is already field-time (the renderer applies speed by accumulation).
+    float t = u_time;
 
     // Top-down pixel coords so cell rows count from the top, matching the grid.
     vec2 px      = vec2(gl_FragCoord.x, u_resolution.y - gl_FragCoord.y);

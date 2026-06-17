@@ -43,7 +43,6 @@ static struct {
     GLint       u_noise_scale;
     GLint       u_warp;
     GLint       u_softness;
-    GLint       u_speed;
     GLint       u_seed;
     GLint       u_skip;
     GLint       u_alpha_cap;
@@ -55,6 +54,11 @@ static struct {
     GLint       u_accent_boost;
     bool        glyph_blend; ///< cross-fade adjacent ramp glyphs when true.
     bool        ready;
+    // Field-time accumulator: integrate wall-clock deltas scaled by cfg.speed so
+    // a speed change alters the rate, not the phase (no jump in the pattern).
+    double      field_time;
+    double      last_wall;
+    bool        have_last_wall;
     // Source mtimes from the last shader (re)load, for change polling.
     time_t      vert_mtime;
     time_t      frag_mtime;
@@ -85,7 +89,6 @@ static void cache_uniforms(void) {
     g_rndr.u_noise_scale = tess_shader_uniform(&g_rndr.shader, "u_noise_scale");
     g_rndr.u_warp        = tess_shader_uniform(&g_rndr.shader, "u_warp");
     g_rndr.u_softness    = tess_shader_uniform(&g_rndr.shader, "u_softness");
-    g_rndr.u_speed       = tess_shader_uniform(&g_rndr.shader, "u_speed");
     g_rndr.u_seed        = tess_shader_uniform(&g_rndr.shader, "u_seed");
     g_rndr.u_skip        = tess_shader_uniform(&g_rndr.shader, "u_skip");
     g_rndr.u_alpha_cap   = tess_shader_uniform(&g_rndr.shader, "u_alpha_cap");
@@ -106,7 +109,6 @@ static void apply_config_uniforms(void) {
     glUniform1f(g_rndr.u_noise_scale, c->noise_scale);
     glUniform1f(g_rndr.u_warp, c->warp);
     glUniform1f(g_rndr.u_softness, c->softness);
-    glUniform1f(g_rndr.u_speed, (float)c->speed);
     glUniform2f(g_rndr.u_seed, c->seed_x, c->seed_y);
     glUniform1f(g_rndr.u_skip, c->skip);
     glUniform1f(g_rndr.u_alpha_cap, c->alpha_cap);
@@ -167,6 +169,8 @@ int tess_renderer_init(int w, int h, const tess_config *cfg) {
     g_rndr.height = h;
     g_rndr.ready  = false;
     g_rndr.glyph_blend = true;  // smooth ramp transitions by default; toggleable.
+    g_rndr.field_time     = 0.0;
+    g_rndr.have_last_wall = false;
 
     if (!tess_shader_load(&g_rndr.shader, VERT_PATH, FRAG_PATH)) {
         fprintf(stderr, "renderer: shader load failed\n");
@@ -218,14 +222,24 @@ void tess_renderer_draw(double time_seconds) {
         return;
     }
 
+    // Integrate field-time from the wall-clock delta scaled by the current speed.
+    // Accumulating (rather than field_time = wall * speed) means a live speed
+    // change alters the drift rate without jumping the pattern to a new phase.
+    if (!g_rndr.have_last_wall) {
+        g_rndr.last_wall = time_seconds;
+        g_rndr.have_last_wall = true;
+    }
+    g_rndr.field_time += (time_seconds - g_rndr.last_wall) * g_rndr.cfg.speed;
+    g_rndr.last_wall = time_seconds;
+
     glClear(GL_COLOR_BUFFER_BIT);
     tess_shader_use(&g_rndr.shader);
 
     // Per-frame / per-event uniforms; the config-driven ones are pushed once on
     // init and on config reload by apply_config_uniforms().
     glUniform2f(g_rndr.u_resolution, (float)g_rndr.width, (float)g_rndr.height);
-    // Feed raw wall-clock seconds; the shader scales this into field-time.
-    glUniform1f(g_rndr.u_time, (float)time_seconds);
+    // Field-time (speed already applied by the accumulator above).
+    glUniform1f(g_rndr.u_time, (float)g_rndr.field_time);
     glUniform2f(g_rndr.u_cell, g_rndr.cell_w, g_rndr.cell_h);
     glUniform1f(g_rndr.u_ramp_count, (float)g_rndr.glyphs.count);
     glUniform1f(g_rndr.u_glyph_blend, g_rndr.glyph_blend ? 1.0f : 0.0f);

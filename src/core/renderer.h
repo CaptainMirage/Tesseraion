@@ -25,8 +25,10 @@ int tess_renderer_init(int w, int h, const tess_config *cfg);
 /// React to a framebuffer resize (updates the viewport and cached resolution).
 void tess_renderer_resize(int w, int h);
 
-/// Render one frame. time_seconds is the host's clock; the renderer applies the
-/// configured speed when it feeds the shader.
+/// Render one frame. time_seconds is the host's monotonic wall clock (e.g.
+/// glfwGetTime()); the renderer integrates it into field-time, scaling deltas by
+/// the configured speed, so a live speed change adjusts the rate without jumping
+/// the pattern. Hosts just pass a steadily increasing clock.
 void tess_renderer_draw(double time_seconds);
 
 /// Rebuild the shader program from disk (hot reload). Returns 0 on success,
