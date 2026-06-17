@@ -14,8 +14,8 @@
 #define FRAG_PATH "shaders/ascii.frag"
 
 // Atlas oversampling: glyphs are baked at this multiple of the screen cell, then
-// downsampled by the GPU. 2x is a clean LINEAR downsample without mipmaps.
-#define GLYPH_SUPERSAMPLE 2
+// downsampled by the GPU with mipmaps for clean, crisp minification.
+#define GLYPH_SUPERSAMPLE 4
 
 // --- Renderer state --------------------------------------------------------
 // A single static instance: there is one render core per process (one context,
@@ -36,6 +36,8 @@ static struct {
     GLint       u_atlas;
     GLint       u_ramp_count;
     GLint       u_skip;
+    GLint       u_glyph_blend;
+    bool        glyph_blend; ///< cross-fade adjacent ramp glyphs when true.
     bool        ready;
 } g_rndr;
 
@@ -61,6 +63,7 @@ static void cache_uniforms(void) {
     g_rndr.u_atlas      = tess_shader_uniform(&g_rndr.shader, "u_atlas");
     g_rndr.u_ramp_count = tess_shader_uniform(&g_rndr.shader, "u_ramp_count");
     g_rndr.u_skip       = tess_shader_uniform(&g_rndr.shader, "u_skip");
+    g_rndr.u_glyph_blend = tess_shader_uniform(&g_rndr.shader, "u_glyph_blend");
 }
 
 /// Derive the screen cell size from the config, growing it when the column count
@@ -97,6 +100,7 @@ int tess_renderer_init(int w, int h, const tess_config *cfg) {
     g_rndr.width  = w;
     g_rndr.height = h;
     g_rndr.ready  = false;
+    g_rndr.glyph_blend = true;  // smooth ramp transitions by default; toggleable.
 
     if (!tess_shader_load(&g_rndr.shader, VERT_PATH, FRAG_PATH)) {
         fprintf(stderr, "renderer: shader load failed\n");
@@ -156,14 +160,23 @@ void tess_renderer_draw(double time_seconds) {
     glUniform2f(g_rndr.u_cell, g_rndr.cell_w, g_rndr.cell_h);
     glUniform1f(g_rndr.u_ramp_count, (float)g_rndr.glyphs.count);
     glUniform1f(g_rndr.u_skip, g_rndr.cfg.skip);
+    glUniform1f(g_rndr.u_glyph_blend, g_rndr.glyph_blend ? 1.0f : 0.0f);
 
-    // Glyph atlas on texture unit 0.
+    // Glyph atlas (2D array) on texture unit 0.
     glActiveTexture(GL_TEXTURE0);
-    glBindTexture(GL_TEXTURE_2D, g_rndr.glyphs.texture);
+    glBindTexture(GL_TEXTURE_2D_ARRAY, g_rndr.glyphs.texture);
     glUniform1i(g_rndr.u_atlas, 0);
 
     // One fullscreen triangle, no buffers. The empty VAO is already bound.
     glDrawArrays(GL_TRIANGLES, 0, 3);
+}
+
+void tess_renderer_set_glyph_blend(bool on) {
+    g_rndr.glyph_blend = on;
+}
+
+bool tess_renderer_glyph_blend(void) {
+    return g_rndr.glyph_blend;
 }
 
 int tess_renderer_reload_shader(void) {

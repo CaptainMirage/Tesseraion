@@ -1,9 +1,10 @@
 // glyphs.h -- the ASCII glyph atlas.
 //
-// The ramp characters are rasterized side by side into one single-channel (R8)
-// GL texture, one fixed-size tile per glyph in ramp order. The fragment shader
-// picks a tile by field intensity and samples that tile's coverage to draw the
-// glyph. Host-agnostic: assumes a current GLES 3.0 context.
+// The ramp characters are rasterized into a single-channel (R8) 2D array
+// texture, one layer per glyph in ramp order, with mipmaps. Per-glyph layers
+// keep mipmapped minification from bleeding between neighbours, and let the
+// shader cross-fade adjacent ramp glyphs by sampling two layers. Host-agnostic:
+// assumes a current GLES 3.0 context.
 
 #ifndef TESS_GLYPHS_H
 #define TESS_GLYPHS_H
@@ -11,13 +12,13 @@
 #include <GLES3/gl3.h>
 #include <stdbool.h>
 
-/// A built glyph atlas. Tiles are laid out left to right in ramp order, each
-/// `tile_w` x `tile_h` texels, so glyph i spans u in [i/count, (i+1)/count].
+/// A built glyph atlas: a 2D array texture with one tile_w x tile_h layer per
+/// glyph, layer i == ramp[i]. Mipmapped.
 typedef struct {
-    GLuint texture;   ///< R8 atlas texture; 0 until built.
-    int    count;     ///< glyph tiles (== ramp length).
-    int    tile_w;    ///< tile width in atlas texels.
-    int    tile_h;    ///< tile height in atlas texels.
+    GLuint texture;   ///< R8 GL_TEXTURE_2D_ARRAY; 0 until built.
+    int    count;     ///< layers (== ramp length).
+    int    tile_w;    ///< layer width in texels.
+    int    tile_h;    ///< layer height in texels.
 } tess_glyphs;
 
 /// Rasterize `ramp` into the atlas from the embedded monospace font, sized for

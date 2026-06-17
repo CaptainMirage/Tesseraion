@@ -13,10 +13,11 @@
 // Active now:
 //   u_resolution : vec2      -- framebuffer size in pixels (width, height)
 //   u_time       : float     -- seconds since start (the host owns the clock)
-//   u_cell       : vec2      -- screen cell size in pixels (width, height)
-//   u_atlas      : sampler2D -- R8 glyph atlas, tiles left->right in ramp order
-//   u_ramp_count : float     -- number of glyph tiles in the atlas
-//   u_skip       : float     -- intensities below this draw nothing (sparsity)
+//   u_cell        : vec2           -- screen cell size in pixels (width, height)
+//   u_atlas       : sampler2DArray -- R8 glyph atlas, one layer per ramp glyph
+//   u_ramp_count  : float          -- number of glyph layers in the atlas
+//   u_skip        : float          -- intensities below this draw nothing (sparsity)
+//   u_glyph_blend : float          -- >0.5 cross-fades adjacent ramp glyphs
 //
 // Reserved for later, kept here so the contract stays stable:
 //   palette colours, noise scale/speed, u_mouse.
@@ -25,14 +26,16 @@
 // ---------------------------------------------------------------------------
 
 precision highp float;
-precision highp int;    // the integer-lattice hash needs full 32-bit int/uint.
+precision highp int;             // the integer-lattice hash needs full 32-bit int/uint.
+precision highp sampler2DArray;  // GLES3 has no default precision for array samplers.
 
-uniform vec2      u_resolution;
-uniform float     u_time;
-uniform vec2      u_cell;
-uniform sampler2D u_atlas;
-uniform float     u_ramp_count;
-uniform float     u_skip;
+uniform vec2           u_resolution;
+uniform float          u_time;
+uniform vec2           u_cell;
+uniform sampler2DArray u_atlas;
+uniform float          u_ramp_count;
+uniform float          u_skip;
+uniform float          u_glyph_blend;
 
 in  vec2 v_uv;
 out vec4 frag_color;
@@ -98,13 +101,28 @@ float field(vec2 n, float t) {
 }
 
 // --- GLYPH stage: intensity -> ramp glyph, sampled from the atlas -----------
-/// Coverage (0..1) of the glyph chosen for the post-skip intensity `norm` (0..1)
-/// at cell-local uv `local` (0..1, origin top-left). Denser glyphs map to higher
-/// intensity, matching the ramp order in the atlas.
+/// Coverage (0..1) of the glyph for the post-skip intensity `norm` (0..1) at
+/// cell-local uv `local` (0..1, origin top-left). Denser glyphs map to higher
+/// intensity. With u_glyph_blend on, adjacent ramp glyphs cross-fade so the
+/// ramp does not band; off, each cell shows one hard glyph.
+///
+/// Explicit gradients: `local` wraps per cell (fract), so its screen derivative
+/// spikes at every cell seam and would force the coarsest mip there. The true
+/// atlas-uv change per screen pixel is just 1/cell, supplied here so mip LOD is
+/// correct and seam-free.
 float glyph_coverage(float norm, vec2 local) {
-    float idx = clamp(floor(norm * u_ramp_count), 0.0, u_ramp_count - 1.0);
-    float u   = (idx + local.x) / u_ramp_count;
-    return texture(u_atlas, vec2(u, local.y)).r;
+    vec2 ddx = vec2(1.0 / u_cell.x, 0.0);
+    vec2 ddy = vec2(0.0, 1.0 / u_cell.y);
+
+    float f  = norm * u_ramp_count;
+    float i0 = clamp(floor(f), 0.0, u_ramp_count - 1.0);
+    float c0 = textureGrad(u_atlas, vec3(local, i0), ddx, ddy).r;
+    if (u_glyph_blend < 0.5) {
+        return c0;
+    }
+    float i1 = min(i0 + 1.0, u_ramp_count - 1.0);
+    float c1 = textureGrad(u_atlas, vec3(local, i1), ddx, ddy).r;
+    return mix(c0, c1, fract(f));
 }
 
 void main() {

@@ -43,11 +43,12 @@ bool tess_glyphs_build(tess_glyphs *g, const char *ramp,
     if (tile_w < 1) { tile_w = 1; }
     if (tile_h < 1) { tile_h = 1; }
 
-    int atlas_w = tile_w * count;
-    int atlas_h = tile_h;
-    unsigned char *atlas = calloc((size_t)atlas_w * (size_t)atlas_h, 1);
+    // One layer per glyph, packed back to back; uploaded as a 2D array texture.
+    size_t layer_px = (size_t)tile_w * (size_t)tile_h;
+    unsigned char *atlas = calloc(layer_px * (size_t)count, 1);
     if (!atlas) {
-        fprintf(stderr, "glyphs: out of memory for %dx%d atlas\n", atlas_w, atlas_h);
+        fprintf(stderr, "glyphs: out of memory for %dx%dx%d atlas\n",
+                tile_w, tile_h, count);
         return false;
     }
 
@@ -70,7 +71,7 @@ bool tess_glyphs_build(tess_glyphs *g, const char *ramp,
         if (!bmp) {
             continue;   // missing glyph -> blank tile.
         }
-        int tile_x0 = ci * tile_w;
+        unsigned char *layer = atlas + (size_t)ci * layer_px;
         int dx0 = gxoff;             // left side bearing from the pen.
         int dy0 = baseline + gyoff;  // top of the glyph relative to the tile top.
         for (int y = 0; y < gh; y++) {
@@ -83,8 +84,7 @@ bool tess_glyphs_build(tess_glyphs *g, const char *ramp,
                 if (tx < 0 || tx >= tile_w) {
                     continue;   // clip anything outside the tile.
                 }
-                atlas[(size_t)ty * (size_t)atlas_w + (size_t)(tile_x0 + tx)] =
-                    bmp[y * gw + x];
+                layer[(size_t)ty * (size_t)tile_w + (size_t)tx] = bmp[y * gw + x];
             }
         }
         stbtt_FreeBitmap(bmp, NULL);
@@ -92,14 +92,17 @@ bool tess_glyphs_build(tess_glyphs *g, const char *ramp,
 
     GLuint tex = 0;
     glGenTextures(1, &tex);
-    glBindTexture(GL_TEXTURE_2D, tex);
+    glBindTexture(GL_TEXTURE_2D_ARRAY, tex);
     glPixelStorei(GL_UNPACK_ALIGNMENT, 1);   // tightly packed single-channel rows.
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_R8, atlas_w, atlas_h, 0,
+    glTexImage3D(GL_TEXTURE_2D_ARRAY, 0, GL_R8, tile_w, tile_h, count, 0,
                  GL_RED, GL_UNSIGNED_BYTE, atlas);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+    // Per-layer mipmaps give clean trilinear minification (the shader supplies
+    // explicit gradients so the per-cell uv wrap does not break LOD selection).
+    glGenerateMipmap(GL_TEXTURE_2D_ARRAY);
+    glTexParameteri(GL_TEXTURE_2D_ARRAY, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D_ARRAY, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D_ARRAY, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_2D_ARRAY, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
     free(atlas);
 
     if (glGetError() != GL_NO_ERROR) {

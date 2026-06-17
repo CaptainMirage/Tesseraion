@@ -13,6 +13,8 @@
 #ifndef TESS_RENDERER_H
 #define TESS_RENDERER_H
 
+#include <stdbool.h>
+
 #include "core/config.h"
 
 /// Initialize the render core for a w x h framebuffer. cfg is copied, so the
@@ -30,6 +32,11 @@ void tess_renderer_draw(double time_seconds);
 /// Rebuild the shader program from disk (hot reload). Returns 0 on success,
 /// nonzero if the rebuild failed (the previous program stays live).
 int tess_renderer_reload_shader(void);
+
+/// Enable/disable smooth cross-fading between adjacent ramp glyphs as the field
+/// intensity varies (off = a hard glyph per cell). Query the current state.
+void tess_renderer_set_glyph_blend(bool on);
+bool tess_renderer_glyph_blend(void);
 
 /// Release all GL resources. Safe to call even if init failed.
 void tess_renderer_shutdown(void);

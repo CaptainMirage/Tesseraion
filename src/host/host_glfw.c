@@ -34,12 +34,20 @@ static void on_framebuffer_size(GLFWwindow *win, int w, int h) {
     tess_renderer_resize(w, h);
 }
 
-/// Esc quits. A live-reload key gets wired alongside hot reload later (CP4).
+/// Esc quits; B toggles smooth glyph cross-fading. A live-reload key gets wired
+/// alongside hot reload later (CP4).
 static void on_key(GLFWwindow *win, int key, int scancode, int action, int mods) {
     (void)scancode;
     (void)mods;
-    if (key == GLFW_KEY_ESCAPE && action == GLFW_PRESS) {
+    if (action != GLFW_PRESS) {
+        return;
+    }
+    if (key == GLFW_KEY_ESCAPE) {
         glfwSetWindowShouldClose(win, GLFW_TRUE);
+    } else if (key == GLFW_KEY_B) {
+        bool on = !tess_renderer_glyph_blend();
+        tess_renderer_set_glyph_blend(on);
+        fprintf(stderr, "glyph blend: %s\n", on ? "on" : "off");
     }
 }
 
@@ -84,6 +92,8 @@ int tess_host_run(const tess_config *cfg) {
         glfwTerminate();
         return 1;
     }
+
+    fprintf(stderr, "tesseraion: Esc to quit, B to toggle glyph blend\n");
 
     // Frame pacing: render when the per-frame budget has elapsed, otherwise
     // sleep on events. This keeps CPU/GPU idle between frames (the FPS cap) yet
