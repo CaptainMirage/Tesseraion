@@ -27,7 +27,72 @@ time. The look is ported from the animated background of my portfolio site.
 
 ## Build
 
-Build instructions land here as the project takes shape.
+Requirements: a C11 compiler, `make`, `pkg-config`, and the GLFW3 and OpenGL ES
+development headers. On Arch: `pacman -S base-devel glfw mesa`.
+
+```bash
+make          # release build (-O2 -Wall -Wextra -Werror), produces ./tesseraion
+make run      # build, then launch the GLFW dev host
+make debug    # unoptimized build with symbols (-O0 -g)
+make clean
+```
+
+The renderer targets OpenGL ES 3.0 / GLSL ES 3.00 (the same feature set as WebGL2,
+broadly supported by Mesa). It runs from the repo root so it can find `shaders/`.
+
+## Run
+
+```bash
+./tesseraion [path/to/config]    # default config path is ./tesseraion.conf
+```
+
+Keys in the dev host:
+
+- `Esc` quit
+- `B`   toggle smooth glyph cross-fading (on) vs one hard glyph per cell (off)
+
+The shader files and the config file are watched while running, so edits apply
+live (see below).
+
+## Configuration
+
+All tunables live in a small `key = value` file. Start from the documented sample:
+
+```bash
+cp tesseraion.conf.example tesseraion.conf
+```
+
+Then uncomment and edit keys; save and the running app re-reads the file
+instantly (the frame cap and everything else update live). `#` starts a comment,
+unknown keys are warned and ignored. Keys include the frame cap and `speed`; the
+cell metrics (`font_size`, `char_w_ratio`, `line_h_ratio`, `max_cols`); the
+`ramp`; the noise field (`noise_scale`, `warp`, `softness`, `skip`, `alpha_cap`,
+`fade_band`); the palette (`mid_rgb`, `peak_rgb`, `blue_start`, `blue_full`,
+`accent_boost`); and `seed`. See `tesseraion.conf.example` for the full list with
+defaults and descriptions.
+
+The pattern is randomized on each launch unless you pin it with `seed = <number>`.
+Editing `speed` changes the drift rate without jumping the pattern. Your local
+`tesseraion.conf` is gitignored, so tweaking it never dirties the repo.
+
+## Architecture
+
+The code is split into a host-agnostic render core and a swappable host, so the
+visual can be reused unchanged by different windowing backends:
+
+- `src/core/` is the render core: it assumes a current GLES 3.0 context and
+  exposes a tiny C API (`init`, `resize`, `draw(time)`, `shutdown`) plus a config
+  apply / hot-reload surface. It owns the shader, the glyph atlas, and all GL
+  state; it never touches windowing, input, or timing.
+- `src/host/` owns the window, the context, the clock, and input, and drives the
+  core through that API. `host_glfw.c` is the windowed dev host.
+- `shaders/ascii.frag` is organised as three editable stages (pattern, glyph,
+  palette) and documents the full uniform contract at the top of the file.
+
+This split is deliberate: a layer-shell wallpaper host (COSMIC, Hyprland, sway,
+river) can be added later as a new host that only supplies its own GLES context,
+reusing the render core untouched. The exact handoff is documented in
+`src/host/host.h`.
 
 ## License
 

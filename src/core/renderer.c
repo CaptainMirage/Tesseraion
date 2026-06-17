@@ -122,6 +122,7 @@ static void apply_config_uniforms(void) {
     glUniform1f(g_rndr.u_blue_start, c->blue_start);
     glUniform1f(g_rndr.u_blue_full, c->blue_full);
     glUniform1f(g_rndr.u_accent_boost, c->accent_boost);
+    glUniform1i(g_rndr.u_atlas, 0);   // sampler -> texture unit 0 (static binding).
 }
 
 /// Current mtime of a file, or 0 if it cannot be stat'd (treated as "absent").
@@ -160,6 +161,10 @@ static bool rebuild_glyphs(void) {
     }
     tess_glyphs_destroy(&g_rndr.glyphs);
     g_rndr.glyphs = next;
+    // The atlas stays bound on texture unit 0 for the renderer's lifetime; bind
+    // the new one here (the only time it changes) so draw never has to.
+    glActiveTexture(GL_TEXTURE0);
+    glBindTexture(GL_TEXTURE_2D_ARRAY, g_rndr.glyphs.texture);
     return true;
 }
 
@@ -237,21 +242,18 @@ void tess_renderer_draw(double time_seconds) {
     glClear(GL_COLOR_BUFFER_BIT);
     tess_shader_use(&g_rndr.shader);
 
-    // Per-frame / per-event uniforms; the config-driven ones are pushed once on
-    // init and on config reload by apply_config_uniforms().
+    // Per-frame / per-event uniforms only. The config-driven uniforms, the sampler
+    // binding, and the atlas texture are all set once (init / reload / atlas
+    // rebuild), so the hot path stays a handful of cheap uniform writes plus one
+    // draw, with no heap allocation and no binding churn.
     glUniform2f(g_rndr.u_resolution, (float)g_rndr.width, (float)g_rndr.height);
-    // Field-time (speed already applied by the accumulator above).
-    glUniform1f(g_rndr.u_time, (float)g_rndr.field_time);
+    glUniform1f(g_rndr.u_time, (float)g_rndr.field_time);   // field-time (speed applied).
     glUniform2f(g_rndr.u_cell, g_rndr.cell_w, g_rndr.cell_h);
     glUniform1f(g_rndr.u_ramp_count, (float)g_rndr.glyphs.count);
     glUniform1f(g_rndr.u_glyph_blend, g_rndr.glyph_blend ? 1.0f : 0.0f);
 
-    // Glyph atlas (2D array) on texture unit 0.
-    glActiveTexture(GL_TEXTURE0);
-    glBindTexture(GL_TEXTURE_2D_ARRAY, g_rndr.glyphs.texture);
-    glUniform1i(g_rndr.u_atlas, 0);
-
-    // One fullscreen triangle, no buffers. The empty VAO is already bound.
+    // One fullscreen triangle, no buffers. The empty VAO and the atlas (unit 0)
+    // are already bound.
     glDrawArrays(GL_TRIANGLES, 0, 3);
 }
 
