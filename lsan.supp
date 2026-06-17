@@ -1,0 +1,11 @@
+# LeakSanitizer suppressions for known, external, one-time leaks.
+#
+# Use with an ASan build:  LSAN_OPTIONS=suppressions=lsan.supp ./tesseraion
+#
+# These are bounded allocations made once inside GLFW's Wayland backend during
+# window creation (viewporter / fractional-scale wl_proxy objects). GLFW does not
+# free them at glfwTerminate; they are reclaimed by the OS at exit and never grow.
+# They are not ours, so suppress them here to keep real leaks visible.
+leak:_glfwCreateWindowWayland
+leak:wl_proxy_marshal_flags
+leak:libwayland-client
