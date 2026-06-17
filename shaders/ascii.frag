@@ -20,6 +20,7 @@
 // ---------------------------------------------------------------------------
 
 precision highp float;
+precision highp int;    // the integer-lattice hash needs full 32-bit int/uint.
 
 uniform vec2  u_resolution;
 uniform float u_time;
@@ -28,33 +29,42 @@ in  vec2 v_uv;
 out vec4 frag_color;
 
 // --- PATTERN stage: value-noise fbm with domain warp -----------------------
-// Reproduces the look of the original website background effect, not a bit-exact
-// port: a float lattice hash stands in for the original integer hash. The
-// value-noise quintic fade, the 3-octave fbm, the domain warp, the feature
-// scale and the slow in-place time drift all match, so blob size and motion
-// track the original.
+// This is value noise (a scalar hash per integer-lattice corner, bilinearly
+// blended), the same generator the original website background effect uses. The
+// integer hash, quintic fade, 3-octave fbm, domain warp, feature scale and slow
+// in-place time drift all match it. The hash is reproduced with 32-bit uint math
+// (which wraps cleanly), so it matches the original exactly across the lattice
+// range we sample, and only parts ways where the original's double precision
+// would itself round (very large seed offsets), which does not change the look.
 
 // Field tunables, constants for now; promoted to config-driven uniforms later (CP4).
 const float NOISE_SCALE = 3.3;          // feature size across the viewport.
 const float WARP        = 0.6;          // domain-warp amount (organic distortion).
 const float SOFTNESS    = 1.2;          // tanh contrast (softness of the field).
-const float SPEED       = 2.0;          // field-time per second; gentle but visibly alive.
+const float SPEED       = 1.0;          // field-time per second; gentle but visibly alive.
 const vec2  SEED        = vec2(0.0);    // pattern offset; randomized per load later (CP4).
 
-/// Stable per-lattice-cell hash in 0..1 (classic sin hash).
-float hash21(vec2 p) {
-    return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453123);
+/// Integer-lattice hash -> 0..1. Mirrors the original effect's hash2: the same
+/// constants, with the wrapping arithmetic carried out in uint so overflow is
+/// well defined.
+float hash2(ivec2 p) {
+    int ni = p.x * 127 + p.y * 311;
+    ni = (ni >> 13) ^ ni;                  // arithmetic shift, as in the original.
+    uint n = uint(ni);                     // reinterpret bits for wrapping math.
+    n = n * (n * n * 15731u + 789221u) + 1376312589u;
+    return float(n & 0x7fffffffu) / 2147483647.0;
 }
 
 /// Value noise: bilinear blend of the four lattice corners with a quintic fade.
 float vnoise(vec2 p) {
-    vec2 i = floor(p);
-    vec2 f = fract(p);
-    vec2 u = f * f * f * (f * (f * 6.0 - 15.0) + 10.0);   // quintic fade.
-    float v00 = hash21(i);
-    float v10 = hash21(i + vec2(1.0, 0.0));
-    float v01 = hash21(i + vec2(0.0, 1.0));
-    float v11 = hash21(i + vec2(1.0, 1.0));
+    vec2  fl = floor(p);
+    ivec2 i  = ivec2(fl);
+    vec2  f  = p - fl;
+    vec2  u  = f * f * f * (f * (f * 6.0 - 15.0) + 10.0);   // quintic fade.
+    float v00 = hash2(i);
+    float v10 = hash2(i + ivec2(1, 0));
+    float v01 = hash2(i + ivec2(0, 1));
+    float v11 = hash2(i + ivec2(1, 1));
     return mix(mix(v00, v10, u.x), mix(v01, v11, u.x), u.y);
 }
 
