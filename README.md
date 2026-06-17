@@ -104,8 +104,7 @@ In plain terms: **the code is mine (Captain Mirage)** and it is copyleft. You're
 free to use, study, modify, and share it, but any version you distribute must
 **also be open source under the GPL**, **keep the copyright and license notices**,
 and **state the changes** you made. If you build on it, **mention me and link
-back to this repository.** Using it without attribution is not cool, and will
-make me angry.
+back to this repository.** Using it without attribution might result in me sneaking into your walls while you sleep.
 
 The bundled font (`third_party/font_vera_mono.h`) is Bitstream Vera Sans Mono
 under its own permissive license (see `third_party/VeraMono-LICENSE.txt`), and

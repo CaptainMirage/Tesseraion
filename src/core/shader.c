@@ -33,7 +33,11 @@ static char *read_file(const char *path) {
         fclose(f);
         return NULL;
     }
-    rewind(f);
+    if (fseek(f, 0, SEEK_SET) != 0) {   // seek back to start (checked, unlike rewind).
+        fprintf(stderr, "shader: rewind failed on '%s'\n", path);
+        fclose(f);
+        return NULL;
+    }
 
     char *buf = malloc((size_t)len + 1);
     if (!buf) {

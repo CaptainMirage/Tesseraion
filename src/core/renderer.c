@@ -228,6 +228,11 @@ void tess_renderer_draw(double time_seconds) {
     if (!g_rndr.ready) {
         return;
     }
+    // Nothing to draw at zero size (e.g. a minimized window or a compositor
+    // transition); skip the pass and avoid a degenerate 0-cell grid.
+    if (g_rndr.width <= 0 || g_rndr.height <= 0) {
+        return;
+    }
 
     // Integrate field-time from the wall-clock delta scaled by the current speed.
     // Accumulating (rather than field_time = wall * speed) means a live speed
