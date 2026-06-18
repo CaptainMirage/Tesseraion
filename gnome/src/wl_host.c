@@ -39,7 +39,12 @@
 // toplevel configure for a wallpaper-style window usually leaves the size to us.
 #define INITIAL_WIDTH  1280
 #define INITIAL_HEIGHT 720
-#define WINDOW_TITLE   "Tesseraion (GNOME wallpaper host)"
+// The companion GNOME Shell extension identifies our window by a unique title token
+// rather than the app_id: a Meta.WaylandClient-spawned process inherits gnome-shell's
+// pid, so a title marker is the reliable cross-context match (the extension filters
+// every window list on title.includes(this token)). Keep this string in sync with
+// WINDOW_MARKER in gnome/extension/extension.js.
+#define WINDOW_TITLE   "tesseraion-wallpaper"
 
 // --- Host state ------------------------------------------------------------
 // One host per process. Kept file-local so the registry/listener callbacks can
