@@ -1,0 +1,8 @@
+# build output
+/build/
+/tesseraion-gnome
+*.o
+*.d
+
+# generated at build time by wayland-scanner from the system xdg-shell.xml
+/protocol/
