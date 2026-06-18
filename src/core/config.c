@@ -19,8 +19,8 @@ void tess_config_default(tess_config *cfg) {
     cfg->line_h_ratio = 1.4f;
     cfg->max_cols     = 260;
 
-    cfg->supersample  = 4;   // matches TESS_GLYPH_SMOOTH trilinear default.
-    cfg->glyph_filter = 0;   // TESS_GLYPH_SMOOTH.
+    cfg->supersample  = 1;   // 1:1 bake; crispest with the pixel filter.
+    cfg->glyph_filter = 2;   // TESS_GLYPH_PIXEL (nearest): sharpest glyphs.
 
     snprintf(cfg->ramp, sizeof cfg->ramp, "%s", " .:-=+*#%@");
 

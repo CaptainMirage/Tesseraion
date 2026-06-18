@@ -18,8 +18,8 @@
 # max_cols     = 260       # cap columns on wide screens (cell grows past this)
 
 # --- Glyph rendering quality (crispness) ---
-# supersample  = 4         # atlas bake multiple of the cell, 1..8 (higher = sharper downsample)
-# glyph_filter = smooth    # smooth (linear+mipmaps), sharp (linear, no mipmaps), pixel (nearest/blocky)
+# supersample  = 1         # atlas bake multiple of the cell, 1..8 (higher = smoother downsample)
+# glyph_filter = pixel     # pixel (nearest/crisp), sharp (linear, no mipmaps), smooth (linear+mipmaps)
 
 # --- Char ramp (sparse -> dense). Quote it to keep the leading space. ---
 # ramp         = " .:-=+*#%@"
