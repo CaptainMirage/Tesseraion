@@ -37,6 +37,7 @@ const LiveWallpaper = GObject.registerClass(
             this._backgroundActor = backgroundActor;
             this._monitorIndex = backgroundActor.monitor;
             this._marker = marker;
+            this._paused = false;
             this._clone = null;
             this._timeoutId = 0;
             this._sourceDestroyId = 0;
@@ -92,6 +93,22 @@ const LiveWallpaper = GObject.registerClass(
             }
         }
 
+        get monitorIndex() {
+            return this._monitorIndex;
+        }
+
+        /// Pause = hide this widget so its clone stops painting; with the real host
+        /// window minimized, nothing else paints the host surface, so the compositor
+        /// stops sending frame callbacks and the host idles on its own. Showing it
+        /// again lets the pending frame callback fire and rendering resumes. No host
+        /// signalling needed: this rides the frame-callback render loop from CP1.
+        setPaused(paused) {
+            if (this._paused === paused)
+                return;
+            this._paused = paused;
+            this.visible = !paused;
+        }
+
         _isDestroyed() {
             return this._backgroundActor === null;
         }
@@ -121,6 +138,8 @@ export class BackgroundOverride {
         this._marker = marker;
         this._injection = new InjectionManager();
         this._widgets = new Set();
+        this._locked = false;
+        this._nudgeId = 0;
     }
 
     enable() {
@@ -132,9 +151,32 @@ export class BackgroundOverride {
                 const widget = new LiveWallpaper(backgroundActor, self._marker);
                 self._widgets.add(widget);
                 widget.connect('destroy', () => self._widgets.delete(widget));
+                // A background rebuilt while locked/fullscreen must start paused.
+                widget.setPaused(self._shouldPause(widget.monitorIndex));
                 return backgroundActor;
             });
         this._reloadBackgrounds();
+    }
+
+    /// Session lock pauses every monitor; otherwise a monitor pauses only while it
+    /// holds a fullscreen window (a game or video, the real GPU drain). The host
+    /// idles once all of its clones are paused.
+    _shouldPause(monitorIndex) {
+        if (this._locked)
+            return true;
+        return global.display.get_monitor_in_fullscreen(monitorIndex);
+    }
+
+    /// Re-evaluate pause state for every live widget. Called by the lifecycle watcher
+    /// on lock and fullscreen-change events.
+    refreshPause() {
+        for (const widget of this._widgets)
+            widget.setPaused(this._shouldPause(widget.monitorIndex));
+    }
+
+    setLocked(locked) {
+        this._locked = locked;
+        this.refreshPause();
     }
 
     disable() {
@@ -152,6 +194,21 @@ export class BackgroundOverride {
         const laters = global.compositor?.get_laters?.() ?? Meta.Laters?.get?.();
         laters?.add(Meta.LaterType.BEFORE_REDRAW, () => {
             Main.layoutManager._updateBackgrounds();
+            return GLib.SOURCE_REMOVE;
+        });
+
+        // blur-my-shell caches a snapshot of the desktop background and does not
+        // notice our clone appearing or going away, so its blur keeps showing the old
+        // wallpaper until a relogin. Nudge it (and any work-area listeners) to
+        // re-capture by emitting the signals it already watches. Deferred a beat so
+        // our clones are attached and allocated before it re-snapshots.
+        if (this._nudgeId)
+            GLib.Source.remove(this._nudgeId);
+        this._nudgeId = GLib.timeout_add(GLib.PRIORITY_DEFAULT, 500, () => {
+            this._nudgeId = 0;
+            if (Main.extensionManager?._enabledExtensions?.includes('blur-my-shell@aunetx'))
+                Main.layoutManager.emit('monitors-changed');
+            global.display.emit('workareas-changed');
             return GLib.SOURCE_REMOVE;
         });
     }
