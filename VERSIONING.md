@@ -57,4 +57,4 @@ To cut a release: bump the component's `VERSION` file (and, for the GNOME host, 
 ## Current
 
 - core:  `core-0.1.6` (beta)
-- gnome: `gnome-0.2.0` (beta)
+- gnome: `gnome-0.2.1` (beta)

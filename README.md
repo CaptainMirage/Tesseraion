@@ -94,6 +94,13 @@ river) can be added later as a new host that only supplies its own GLES context,
 reusing the render core untouched. The exact handoff is documented in
 `src/host/host.h`.
 
+## Desktop wallpaper hosts
+
+- GNOME (Wayland): `gnome/` is a wallpaper host for GNOME Shell, built as a Shell
+  extension plus a native Wayland/EGL host that reuses this render core unchanged.
+  GNOME has no layer-shell, so it takes a different route from the wlroots desktops
+  above. See [gnome/README.md](gnome/README.md).
+
 ## License
 
 This project is licensed under the **GNU General Public License v3.0 or later**

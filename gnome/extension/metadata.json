@@ -3,6 +3,6 @@
   "name": "Tesseraion",
   "description": "Runs the Tesseraion animated ASCII-noise renderer as the GNOME desktop background. Spawns the GLES host as a shell-owned Wayland client and clones its surface into each monitor's background actor, hidden from the overview, alt-tab, and window list.",
   "shell-version": ["50"],
-  "version-name": "gnome-0.2.0",
+  "version-name": "gnome-0.2.1",
   "session-modes": ["user"]
 }
