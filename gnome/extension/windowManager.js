@@ -38,21 +38,41 @@ class ManagedWindow {
                 this._window.minimize();
         }));
 
-        this._sizeToMonitor();
+        this.sizeToTarget();
         this._window.lower();
         this._window.minimize();
     }
 
-    /// Resize the host window to fill its monitor so the 1:1 clone covers the
-    /// background. The host receives the configure and resizes its GLES surface.
-    /// Multi-monitor/HiDPI refinement is a later chunk; target the primary for now.
-    _sizeToMonitor() {
-        const idx = Main.layoutManager.primaryIndex;
-        const mon = Main.layoutManager.monitors[idx];
-        if (!mon)
+    /// Resize the host window to the largest connected monitor so the highest-
+    /// resolution output is rendered natively and every other monitor's clone is a
+    /// clean downscale (a single host is cloned onto all monitors; per-monitor
+    /// independent fields are a possible later addition). The host receives the
+    /// configure and resizes its GLES surface to match.
+    ///
+    /// Sizes in logical pixels: at scale 1.0 (the common case) that is the native
+    /// resolution. Crisp rendering under fractional/HiDPI scaling would need the host
+    /// to speak the fractional-scale + viewporter protocols and is deferred.
+    sizeToTarget() {
+        if (this._disposed)
+            return;
+        const monitors = Main.layoutManager.monitors;
+        if (!monitors || monitors.length === 0)
+            return;
+        // Pick the largest by pixel area; fall back to the primary on a tie/!found.
+        let target = monitors[Main.layoutManager.primaryIndex] ?? monitors[0];
+        let bestArea = target ? target.width * target.height : 0;
+        for (const mon of monitors) {
+            const area = mon.width * mon.height;
+            if (area > bestArea) {
+                target = mon;
+                bestArea = area;
+            }
+        }
+        if (!target)
             return;
         // move_resize_frame(userOp=false, x, y, w, h): a programmatic, non-user move.
-        this._window.move_resize_frame(false, mon.x, mon.y, mon.width, mon.height);
+        this._window.move_resize_frame(false, target.x, target.y,
+                                       target.width, target.height);
     }
 
     destroy() {
@@ -74,6 +94,8 @@ export class WindowManager {
         this._launcher = launcher;
         this._managed = new Map();   // MetaWindow -> { mw: ManagedWindow, unmanagedId }
         this._mapId = 0;
+        this._monitorsChangedId = 0;
+        this._resizeIdleId = 0;
     }
 
     enable() {
@@ -81,6 +103,23 @@ export class WindowManager {
             const window = actor.get_meta_window();
             if (window && this._launcher.owns_window(window))
                 this._add(window);
+        });
+        // On a resolution change or monitor hotplug (e.g. plugging in a TV), the shell
+        // rebuilds its background actors (so our clones re-attach automatically); we
+        // just need to re-size the host to the new largest monitor. Defer one idle tick
+        // so the new monitor geometry has settled before we read it.
+        this._monitorsChangedId = Main.layoutManager.connect('monitors-changed',
+            () => this._onMonitorsChanged());
+    }
+
+    _onMonitorsChanged() {
+        if (this._resizeIdleId)
+            return;   // coalesce a burst of changes into one resize.
+        this._resizeIdleId = GLib.idle_add(GLib.PRIORITY_DEFAULT, () => {
+            this._resizeIdleId = 0;
+            for (const {mw} of this._managed.values())
+                mw.sizeToTarget();
+            return GLib.SOURCE_REMOVE;
         });
     }
 
@@ -112,6 +151,14 @@ export class WindowManager {
         if (this._mapId) {
             global.window_manager.disconnect(this._mapId);
             this._mapId = 0;
+        }
+        if (this._monitorsChangedId) {
+            Main.layoutManager.disconnect(this._monitorsChangedId);
+            this._monitorsChangedId = 0;
+        }
+        if (this._resizeIdleId) {
+            GLib.Source.remove(this._resizeIdleId);
+            this._resizeIdleId = 0;
         }
         for (const window of [...this._managed.keys()])
             this._remove(window);
