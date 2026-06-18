@@ -65,6 +65,14 @@ typedef struct {
     int  height;
     bool configured;     ///< first xdg_surface configure has been ack'd.
     bool should_close;   ///< toplevel close requested, or a fatal error.
+    // Frame pacing is driven by wl_surface.frame callbacks: the compositor calls us
+    // back when it is ready to present the next frame, which is the correct way to
+    // animate on Wayland (a bare timer leaves buffers unpresented until some other
+    // event wakes the compositor, so the effect appeared to freeze unless the cursor
+    // moved). frame_ready gates the next draw; it starts true to kick the first frame
+    // and, when the surface is occluded and the compositor stops sending callbacks,
+    // it simply stays false so we idle (free groundwork for the lifecycle pausing).
+    bool frame_ready;
 
     // Pending size from the most recent toplevel configure, applied atomically on
     // the following xdg_surface configure (the standard xdg-shell sequencing).
@@ -294,6 +302,33 @@ static void host_destroy(wl_host *h) {
     if (h->display)     { wl_display_disconnect(h->display); }
 }
 
+// --- Frame callback: compositor-driven pacing -------------------------------
+
+/// The compositor fired the frame callback for the surface we committed, meaning it
+/// is ready for the next frame. Free the one-shot callback and re-arm rendering.
+static void on_frame_done(void *data, struct wl_callback *callback, uint32_t time_ms) {
+    (void)time_ms;
+    wl_host *h = data;
+    wl_callback_destroy(callback);   // frame callbacks are one-shot; do not leak them.
+    h->frame_ready = true;
+}
+
+static const struct wl_callback_listener frame_listener = {
+    .done = on_frame_done,
+};
+
+/// Render one frame: request the next frame callback first so the commit that
+/// eglSwapBuffers issues carries it, then draw and swap. Returns false if the swap
+/// failed. Clears frame_ready; on_frame_done sets it again when the compositor is
+/// ready, throttled on top by the host's FPS-cap budget.
+static bool render_frame(wl_host *h, double time_seconds) {
+    struct wl_callback *cb = wl_surface_frame(h->surface);
+    wl_callback_add_listener(cb, &frame_listener, h);
+    tess_renderer_draw(time_seconds);
+    h->frame_ready = false;
+    return eglSwapBuffers(h->egl_display, h->egl_surface);
+}
+
 // --- Public entry ----------------------------------------------------------
 
 int tess_gnome_host_run(const tess_config *cfg, const char *config_path) {
@@ -308,6 +343,7 @@ int tess_gnome_host_run(const tess_config *cfg, const char *config_path) {
     h.egl_surface = EGL_NO_SURFACE;
     h.width  = INITIAL_WIDTH;
     h.height = INITIAL_HEIGHT;
+    h.frame_ready = true;   // kick the first frame; the callback paces the rest.
 
     h.display = wl_display_connect(NULL);
     if (!h.display) {
@@ -359,9 +395,11 @@ int tess_gnome_host_run(const tess_config *cfg, const char *config_path) {
     fprintf(stderr, "tesseraion-gnome: app_id '%s'; shader/config hot-reload on save\n",
             TESS_GNOME_APP_ID);
 
-    // Frame pacing: render when the per-frame budget has elapsed, otherwise sleep on
-    // the Wayland fd until the next deadline (or an incoming event). Keeps the GPU
-    // idle between frames at the configured FPS cap while staying responsive.
+    // Frame pacing: rendering is gated on BOTH the compositor's frame callback
+    // (frame_ready) and our FPS-cap budget. The callback is what makes the animation
+    // advance while idle and behave under VRR/throttling; the budget caps the rate on
+    // top so an active wallpaper does not run at full refresh. When the surface is
+    // occluded the compositor stops sending callbacks and we naturally idle.
     double budget = (live.fps_cap > 0) ? 1.0 / (double)live.fps_cap : 0.0;
     double next   = now_seconds();
 
@@ -402,9 +440,8 @@ int tess_gnome_host_run(const tess_config *cfg, const char *config_path) {
             }
         }
 
-        if (now >= next) {
-            tess_renderer_draw(now);
-            if (!eglSwapBuffers(h.egl_display, h.egl_surface)) {
+        if (h.frame_ready && now >= next) {
+            if (!render_frame(&h, now)) {
                 fprintf(stderr, "host: eglSwapBuffers failed\n");
                 break;
             }
@@ -415,8 +452,15 @@ int tess_gnome_host_run(const tess_config *cfg, const char *config_path) {
                 next = now + budget;
             }
         } else {
-            // Sleep until the next frame deadline, waking early on a Wayland event.
-            int timeout_ms = (int)((next - now) * 1000.0);
+            // Sleep until the next thing that needs us: the FPS-cap deadline if a
+            // frame is ready, otherwise just the periodic reload poll (when occluded,
+            // no callback is coming). A Wayland event (incl. the frame callback) wakes
+            // us early. Re-clamp every iteration so config reloads stay timely.
+            double wake = next_reload_check;
+            if (h.frame_ready && next < wake) {
+                wake = next;
+            }
+            int timeout_ms = (int)((wake - now) * 1000.0);
             if (timeout_ms < 0) { timeout_ms = 0; }
             struct pollfd pfd = { .fd = fd, .events = POLLIN };
             if (poll(&pfd, 1, timeout_ms) > 0 && (pfd.revents & POLLIN)) {
